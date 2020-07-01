@@ -1,0 +1,11 @@
+-Wall
+-I./xbraid/braid
+./xbraid/libbraid.a
+-lm
+-lstdc++
+-I../xbraid/ompi_build/include
+../../xbraid/ompi_build/lib/libmpi.la
+-L/usr/local/opt/openblas/lib
+-I/usr/local/opt/openblas/include
+-L/usr/local/opt/lapack/lib
+-I/usr/local/opt/lapack/include

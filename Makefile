@@ -11,11 +11,11 @@ ifeq ($(shell uname -s), Darwin)
    MPIF90 = mpif90
    LFLAGS = -lm -lstdc++
    ifeq ($(optlevel),DEBUG)
-      CFLAGS = -g -Wall
+      CFLAGS = -g -Wall -L/usr/local/opt/openblas/lib -I/usr/local/opt/openblas/include -L/usr/local/opt/lapack/lib -I/usr/local/opt/lapack/insude
       CXXFLAGS = -g -Wall
       FORTFLAGS = -Og -Wall
    else
-      CFLAGS = -O -Wall
+      CFLAGS = -O -Wall -L/usr/local/opt/openblas/lib -I/usr/local/opt/openblas/include -L/usr/local/opt/lapack/lib -I/usr/local/opt/lapack/insude
       CXXFLAGS = -O -Wall
       FORTFLAGS = -O1 -Wall
    endif
@@ -96,9 +96,13 @@ xbraid: ./xbraid/braid/*.c
 
 crowd: src/main.c $(BRAID_LIB_FILE)
 	@echo "Building" $@ "..."
-	$(MPICC) $(CFLAGS) $(BRAID_FLAGS) src/main.c -o $(@) $(BRAID_LIB_FILE) $(LFLAGS)
+	$(MPICC) $(CFLAGS) -L. -llapacke -llapack -lopenblas -lgfortran $(BRAID_FLAGS) -o crowd src/main.c $(BRAID_LIB_FILE) $(LFLAGS)
 
 clean:
 	rm -f *.out.*
 	rm -f *.o crowd
-	cd xbraid; make clean
+	cd xbraid; $(MAKE) clean
+
+cleanall:
+	$(MAKE) clean
+	cd lapack; $(MAKE) clean
