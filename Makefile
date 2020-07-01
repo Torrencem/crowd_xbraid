@@ -101,8 +101,7 @@ crowd: src/main.c $(BRAID_LIB_FILE)
 clean:
 	rm -f *.out.*
 	rm -f *.o crowd
-	cd xbraid; $(MAKE) clean
 
 cleanall:
 	$(MAKE) clean
-	cd lapack; $(MAKE) clean
+	cd xbraid; $(MAKE) clean
