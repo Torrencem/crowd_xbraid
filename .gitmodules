@@ -1,0 +1,7 @@
+[submodule "lapack"]
+	path = lapack
+	url = https://github.com/Reference-LAPACK/lapack.git
+[submodule "xbraid"]
+	path = xbraid
+    url = https://github.com/XBraid/xbraid.git
+    branch = trimgrit
