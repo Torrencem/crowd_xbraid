@@ -1,41 +1,13 @@
-/*BHEADER**********************************************************************
- * Written by Isaiah Meyers, Joseph Munar, Eric Neville, Tom Overman
- *
- * This file is part of XBraid. For support, post issues to the XBraid Github
- *page.
- *
- * This program is free software; you can redistribute it and/or modify it under
- * the terms of the GNU General Public License (as published by the Free
- *Software Foundation) version 2.1 dated February 1999.
- *
- * This program is distributed in the hope that it will be useful, but WITHOUT
- *ANY WARRANTY; without even the IMPLIED WARRANTY OF MERCHANTABILITY or FITNESS
- *FOR A PARTICULAR PURPOSE. See the terms and conditions of the GNU General
- *Public License for more details.
- *
- * You should have received a copy of the GNU Lesser General Public License
- *along with this program; if not, write to the Free Software Foundation, Inc.,
- *59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
- *
- ***********************************************************************EHEADER*/
-
 /**
- * Example:       trischur-adv-diff.c
+ * Compile with:  make model_problem
  *
- * Interface:     C
+ * Description:   Solves a non-linear model optimization problem:
  *
- * Requires:      only C-language support
- *
- * Compile with:  make trischur-adv-diff
- *
- * Description:   Solves a linear optimal control problem in time-parallel:
- *
- *                min   0.5\int_0^T \int_0^1 (u(x,t)-u0(x))^2+alpha v(x,t)^2
+ *                min   \int_0^T \int_0^X u^2(t, x) + v^2(t, x) dx dt
  *dxdt
  *
- *                s.t.  du/dt + du/dx - nu d^2u/dx^2 = v(x,t)
- *                      u(0,t)=u(1,t)=0
- *                      u(x,0)=u0(x)
+ *                s.t.  u_t = (uv)_x
+ *
  **/
 
 #include <math.h>
@@ -52,6 +24,8 @@
 #define b(dt, dx, nu) nu *dt / (dx * dx)
 
 #include "lapacke.h"
+
+#include "utils.c"
 
 /*--------------------------------------------------------------------------
  * My App and Vector structures
@@ -570,12 +544,6 @@ int main(int argc, char *argv[]) {
     while (arg_index < argc) {
         if (strcmp(argv[arg_index], "-help") == 0) {
             printf("\n");
-            printf(" Solves the advection-diffusion model problem \n\n");
-            printf("  min  1/2 \\int_0^T\\int_0^1 (u(x,t)-ubar(x))^2 + "
-                   "alpha*v(x,t)^2  dxdt \n\n");
-            printf("  s.t.  u_t + u_x - nu*u_xx = v(x,t) \n");
-            printf("        u(0,t) = u(1,t) = 0 \n\n");
-            printf("        u(x,0) = u0(x) \n");
             printf("  -tstop <tstop>          : Upper integration limit for "
                    "time\n");
             printf("  -ntime <ntime>          : Num points in time\n");
@@ -724,7 +692,7 @@ int main(int argc, char *argv[]) {
         fclose(file);
 
         /* Compute control v from adjoint w and print to file */
-        sprintf(filename, "%s.%03d", "trischur-adv-diff.out.v", (app->myid));
+        sprintf(filename, "%s.%03d", "model_problem.out.v", (app->myid));
         file = fopen(filename, "w");
         v = (double **)malloc(app->npoints * sizeof(double *));
         for (i = 0; i < app->npoints; i++) {
@@ -749,7 +717,7 @@ int main(int argc, char *argv[]) {
         fclose(file);
 
         /* Compute state u from adjoint w and print to file */
-        sprintf(filename, "%s.%03d", "trischur-adv-diff.out.u", (app->myid));
+        sprintf(filename, "%s.%03d", "model_problem.out.u", (app->myid));
         file = fopen(filename, "w");
         u = (double **)malloc(app->npoints * sizeof(double *));
         for (i = 0; i < app->npoints; i++) {
@@ -783,7 +751,7 @@ int main(int argc, char *argv[]) {
         fclose(file);
 
         /* Print initial guess u0 to file */
-        sprintf(filename, "%s.%03d", "trischur-adv-diff.out.u0", (app->myid));
+        sprintf(filename, "%s.%03d", "model_problem.out.u0", (app->myid));
         file = fopen(filename, "w");
         for (j = 0; j < mspace; j++) {
             if (j != mspace - 1) {
@@ -824,50 +792,6 @@ int main(int argc, char *argv[]) {
     /* Print runtime to file (for runtime comparisons)*/
     time = (double)(end - start) / CLOCKS_PER_SEC;
     printf("Total Run Time: %f s \n", time);
-
-    //   {
-    //      char    filename[255];
-    //      FILE   *file;
-    //
-    //      //Note that this out file appends the number of time steps
-    //      sprintf(filename, "%s.%d", "trischur-adv-diff.time", ntime);
-    //
-    //      file = fopen(filename, "w");
-    //      fprintf(file, "%f", time);
-    //      fflush(file);
-    //      fclose(file);
-    //   }
-
-    //   /* RDF Testing */
-    //   {
-    //      double     cscale = (1/(dx*dt))*(2 + dt*dt/alpha);
-    //      double     lscale = (1/(dx*dt))*(1 + dt*dt/alpha);
-    //      my_Vector *e = (my_Vector *) malloc(sizeof(my_Vector));
-    //      my_Vector *z = (my_Vector *) malloc(sizeof(my_Vector));
-    //
-    //      (e->values) = (double*) malloc( mspace*sizeof(double) );
-    //      (z->values) = (double*) malloc( mspace*sizeof(double) );
-    //      for(i = 0; i < mspace; i++)
-    //      {
-    //         (e->values[i]) = 1.0;
-    //         (z->values[i]) = 0.0;
-    //      }
-    //      apply_TriResidual(app, z, z, NULL, e, 1, dt);
-    //
-    //      for(i = 0; i < mspace; i++)
-    //      {
-    //         (e->values[i]) = 1.0;
-    //         (z->values[i]) = 0.0;
-    //      }
-    //      apply_TriResidual(app, NULL, z, NULL, e, 1, dt);
-    //
-    //      for(i = 0; i < mspace; i++)
-    //      {
-    //         (e->values[i]) = 1.0;
-    //         (z->values[i]) = 0.0;
-    //      }
-    //      apply_TriResidual(app, z, NULL, NULL, e, 1, dt);
-    //   }
 
     vec_destroy(app->u0);
     vec_destroy(app->scr);
