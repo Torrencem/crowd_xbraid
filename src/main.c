@@ -52,6 +52,7 @@
 #define b(dt, dx, nu) nu *dt / (dx * dx)
 
 #include "lapacke.h"
+#include "utils.c"
 
 /*--------------------------------------------------------------------------
  * My App and Vector structures
@@ -81,36 +82,6 @@ typedef struct _braid_Vector_struct {
     double *values; /* Holds the R^M state vector (u_1, u_2,...,u_M) */
 
 } my_Vector;
-
-/*--------------------------------------------------------------------------
- * Vector utility routines
- *--------------------------------------------------------------------------*/
-
-void vec_create(int size, double **vec_ptr) {
-    *vec_ptr = (double *)malloc(size * sizeof(double));
-}
-
-void vec_destroy(double *vec) { free(vec); }
-
-/*------------------------------------*/
-
-void vec_copy(int size, double *invec, double *outvec) {
-    int i;
-    for (i = 0; i < size; i++) {
-        outvec[i] = invec[i];
-    }
-}
-
-/*------------------------------------*/
-
-void vec_axpy(int size, double alpha, double *x, double beta, double *y) {
-    int i;
-    for (i = 0; i < size; i++) {
-        y[i] = alpha * x[i] + beta * y[i];
-    }
-}
-
-/*------------------------------------*/
 
 void vec_scale(int size, double alpha, double *x) {
     int i;
@@ -211,8 +182,8 @@ int apply_TriResidual(my_App *app, my_Vector *uleft, my_Vector *uright,
     double *rtmp, *utmp;
 
     /* Create temporary vectors */
-    vec_create(mspace, &rtmp);
-    vec_create(mspace, &utmp);
+    rtmp = zero_vector(mspace);
+    utmp = zero_vector(mspace);
 
     /* Compute action of center block */
 
@@ -331,7 +302,7 @@ int my_TriSolve(braid_App app, braid_Vector uleft, braid_Vector uright,
     }
 
     /* Create temporary vector */
-    vec_create(mspace, &utmp);
+    utmp = zero_vector(mspace);
 
     for (iter = 0; iter < 1; iter++) {
         /* Initialize temporary solution vector */
@@ -369,7 +340,7 @@ int my_Init(braid_App app, double t, braid_Vector *u_ptr) {
 
     /* Allocate the vector */
     u = (my_Vector *)malloc(sizeof(my_Vector));
-    vec_create(mspace, &(u->values));
+    u->values = zero_vector(mspace);
 
     for (i = 0; i <= mspace - 1; i++) {
         u->values[i] = ((double)braid_Rand()) / braid_RAND_MAX;
@@ -389,7 +360,7 @@ int my_Clone(braid_App app, braid_Vector u, braid_Vector *v_ptr) {
 
     /* Allocate the vector */
     v = (my_Vector *)malloc(sizeof(my_Vector));
-    vec_create(mspace, &(v->values));
+    u->values = zero_vector(mspace);
     vec_copy(mspace, (u->values), (v->values));
 
     *v_ptr = v;
@@ -454,7 +425,7 @@ int my_Access(braid_App app, braid_Vector u, braid_AccessStatus astatus) {
         if (app->w[ii] != NULL) {
             free(app->w[ii]);
         }
-        vec_create(mspace, &(app->w[ii]));
+        app->w[ii] = zero_vector(mspace);
         vec_copy(mspace, (u->values), (app->w[ii]));
     }
 
@@ -514,7 +485,7 @@ int my_BufUnpack(braid_App app, void *buffer, braid_Vector *u_ptr,
 
     /* Allocate memory */
     u = (my_Vector *)malloc(sizeof(my_Vector));
-    vec_create((app->mspace), &(u->values));
+    u->values = zero_vector((app->mspace));
 
     /* Unpack the buffer */
     vec_copy((app->mspace), dbuffer, (u->values));
@@ -649,7 +620,7 @@ int main(int argc, char *argv[]) {
     dt = (tstop - tstart) / ntime;
 
     /* Set up initial condition */
-    vec_create(mspace, &u0);
+    u0 = zero_vector(mspace);
     for (i = 0; i < mspace / 2; i++) {
         u0[i] = 1;
     }
@@ -658,7 +629,7 @@ int main(int argc, char *argv[]) {
     }
 
     /* Set up scratch space */
-    vec_create(3 * mspace, &scr);
+    scr = zero_vector(3 * mspace);
 
     /* Set up the app structure */
     app = (my_App *)malloc(sizeof(my_App));
@@ -728,7 +699,7 @@ int main(int argc, char *argv[]) {
         file = fopen(filename, "w");
         v = (double **)malloc(app->npoints * sizeof(double *));
         for (i = 0; i < app->npoints; i++) {
-            vec_create((app->mspace), &v[i]);
+            v[i] = zero_vector((app->mspace));
         }
         for (i = 0; i < (app->npoints); i++) {
             vec_copy(mspace, w[i], v[i]);
@@ -753,7 +724,7 @@ int main(int argc, char *argv[]) {
         file = fopen(filename, "w");
         u = (double **)malloc(app->npoints * sizeof(double *));
         for (i = 0; i < app->npoints; i++) {
-            vec_create((app->mspace), &u[i]);
+            u[i] = zero_vector((app->mspace));
         }
         for (i = 0; i < (app->npoints); i++) {
             if (i != app->npoints - 1) {

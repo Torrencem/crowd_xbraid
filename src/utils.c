@@ -16,9 +16,43 @@ Matrix zero_matrix(const int m, const int n) {
     return result;
 }
 
+Vector zero_vector(const int size) {
+    double *result;
+
+    result = (double *)calloc(size, sizeof(double));
+
+    return result;
+}
+
+inline void matrix_destroy(Matrix a) { free(a); }
+
+inline void vec_destroy(Vector a) { free(a); }
+
+void matrix_copy(const int m, const int n, const Matrix a, Matrix b) {
+    memcpy(b, a, m * n * sizeof(double));
+}
+
+void vec_copy(const int size, const double *a, double *b) {
+    memcpy(b, a, size * sizeof(double));
+}
+
 inline void set_element(Matrix a, const int m, const int n, const int i,
                         const int j, const double val) {
     a[i * m + j] = val;
+}
+
+void vec_axpy(const int size, const double alpha, const Vector x,
+              const double beta, Vector y) {
+    for (int i = 0; i < size; i++) {
+        y[i] = alpha * x[i] + beta * y[i];
+    }
+}
+
+void matrix_axpy(const int m, const int n, const double alpha, const Matrix a,
+                 const double beta, Matrix b) {
+    for (int i = 0; i < m * n; i++) {
+        b[i] = alpha * a[i] + beta * b[i];
+    }
 }
 
 // x should be of size n
