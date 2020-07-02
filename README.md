@@ -17,3 +17,7 @@ then simply:
     make
 
 in the root directory to build. Please report any problems you have getting things to work.
+
+Before committing code changes, please run:
+
+    make fmt
