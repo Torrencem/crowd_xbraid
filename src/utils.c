@@ -1,35 +1,36 @@
 
-#include "lapacke.h"
 #include "cblas.h"
+#include "lapacke.h"
 
 #include "string.h"
 
-typedef double* Matrix;
-typedef double* Vector;
+typedef double *Matrix;
+typedef double *Vector;
 
 // M rows, N columns
 Matrix zero_matrix(const int m, const int n) {
-    double * result;
+    double *result;
 
-    result = (double *) calloc(n * m, sizeof(double));
+    result = (double *)calloc(n * m, sizeof(double));
 
     return result;
 }
 
-inline void set_element(Matrix a, const int m, const int n, const int i, const int j, const double val) {
+inline void set_element(Matrix a, const int m, const int n, const int i,
+                        const int j, const double val) {
     a[i * m + j] = val;
 }
 
 // x should be of size n
 inline void matmul(const Matrix a, const int m, const int n, Vector *x) {
     double *y = calloc(m, sizeof(double));
-    cblas_dgemv(CblasRowMajor, CblasNoTrans, m, n, 1.0, a,
-            n, *x, 1, 0.0, y, 1);
+    cblas_dgemv(CblasRowMajor, CblasNoTrans, m, n, 1.0, a, n, *x, 1, 0.0, y, 1);
     *x = y;
 }
 
 // Ku = v, solve for u, K is tridiagonal
-int solve_tridiag_system(Vector KL, Vector K, Vector KU, const int n, const Vector v, Vector *u) {
+int solve_tridiag_system(Vector KL, Vector K, Vector KU, const int n,
+                         const Vector v, Vector *u) {
     double *u_ptr = calloc(n, sizeof(double));
     memcpy(u_ptr, v, n * sizeof(double));
     int ret = LAPACKE_dgtsv(LAPACK_ROW_MAJOR, n, 1, KL, K, KU, v, n);
