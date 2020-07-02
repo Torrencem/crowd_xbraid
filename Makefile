@@ -102,6 +102,13 @@ clean:
 	rm -f *.out.*
 	rm -f *.o crowd
 
+fmt: src/*.c
+	for file in $^ ; do \
+		echo "Formatting" $${file} "..." ; \
+		clang-format $${file} > $${file}.fmt ; \
+		mv $${file}.fmt $${file} ; \
+	done
+
 cleanall:
 	$(MAKE) clean
 	cd xbraid; $(MAKE) clean
