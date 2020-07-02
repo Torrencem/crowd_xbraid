@@ -30,11 +30,8 @@ inline void matmul(const Matrix a, const int m, const int n, Vector *x) {
 
 // Ku = v, solve for u, K is tridiagonal
 int solve_tridiag_system(Vector KL, Vector K, Vector KU, const int n,
-                         const Vector v, Vector *u) {
-    double *u_ptr = calloc(n, sizeof(double));
-    memcpy(u_ptr, v, n * sizeof(double));
-    int ret = LAPACKE_dgtsv(LAPACK_ROW_MAJOR, n, 1, KL, K, KU, v, n);
-    *u = u_ptr;
+                         Vector v) {
+    int ret = LAPACKE_dgtsv(LAPACK_ROW_MAJOR, n, 1, KL, K, KU, v, 1);
     return ret;
 }
 
@@ -65,14 +62,14 @@ int main() {
     /* } */
     /* printf("]\n"); */
 
-    double KL[2] = {0.0, 0.0};
-    double K[3] = {1.0, 1.0, 1.0};
-    double KU[2] = {0.0, 0.0};
-    double v[3] = {10.0, 20.0, 30.0};
-    Vector u = NULL;
-    solve_tridiag_system(KL, K, KU, 3, v, &u);
-    for (int i = 0; i < 3; i++) {
-        printf("%f,", u[i]);
+    double KL[3] = {2, 2, 3};
+    double K[4] = {1, 1, 5, 1};
+    double KU[3] = {2, 2, 2};
+    double v[4] = {14, 28, 27, 13};
+    int info = solve_tridiag_system(KL, K, KU, 4, v);
+    printf("Returned: %i\n", info);
+    for (int i = 0; i < 4; i++) {
+        printf("%f,", v[i]);
     }
     printf("\n");
 }
