@@ -18,6 +18,8 @@ then simply:
 
 in the root directory to build. Please report any problems you have getting things to work.
 
+If the build fails (probably on Mac) because of "-lgfortran", then try locating your `libgfortran.a` on your system (`sudo find /usr -iname 'libgfortran*.a'` might help), and symlinking it into the root directory of this project (`sudo ln -s /usr/<blahblah>/libgfortran.a ./libgfortran.a`).
+
 Before committing code changes, please run:
 
     make fmt
