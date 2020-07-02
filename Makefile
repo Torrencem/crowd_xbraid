@@ -89,7 +89,7 @@ BRAID_LIB_FILE = $(BRAID_DIR)/libbraid.a
 .SUFFIXES:
 .SUFFIXES: .c .o
 
-all: xbraid crowd
+all: xbraid crowd model_problem
 
 xbraid: ./xbraid/braid/*.c
 	cd xbraid; $(MAKE) braid
@@ -102,9 +102,13 @@ utils: src/utils.c $(BRAID_LIB_FILE)
 	@echo "Building" $@ "..."
 	$(MPICC) $(CFLAGS) -L. -llapacke -llapack -lopenblas -lgfortran $(BRAID_FLAGS) -o utils src/utils.c $(BRAID_LIB_FILE) $(LFLAGS)
 
+model_problem: src/model_problem.c $(BRAID_LIB_FILE)
+	@echo "Building" $@ "..."
+	$(MPICC) $(CFLAGS) -L. -llapacke -llapack -lopenblas -lgfortran $(BRAID_FLAGS) -o utils src/model_problem.c $(BRAID_LIB_FILE) $(LFLAGS)
+
 clean:
 	rm -f *.out.*
-	rm -f *.o crowd
+	rm -f *.o crowd utils model_problem
 
 fmt: src/*.c
 	for file in $^ ; do \

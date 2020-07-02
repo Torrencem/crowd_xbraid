@@ -1,4 +1,5 @@
 **/*.out.*
 crowd
 utils
+model_problem
 libgfortran.a
