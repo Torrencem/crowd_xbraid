@@ -57,7 +57,7 @@ else ifeq ($(shell uname -s),Linux)
    MPICXX = mpiCC
    MPIF90 = mpif90
    LFLAGS = -lm
-   EXTRAFLAGS = /usr/lib/x86_64-linux-gnu/liblapack.a /usr/lib/x86_64-linux-gnu/liblapacke.a
+   EXTRAFLAGS = /usr/lib/x86_64-linux-gnu/liblapacke.a /usr/lib/x86_64-linux-gnu/liblapack.a
    ifeq ($(optlevel),DEBUG)
       CFLAGS = -g -Wall
       CXXFLAGS = -g -Wall
