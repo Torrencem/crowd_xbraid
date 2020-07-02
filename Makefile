@@ -10,6 +10,7 @@ ifeq ($(shell uname -s), Darwin)
    MPICXX = mpicxx
    MPIF90 = mpif90
    LFLAGS = -lm -lstdc++
+   EXTRAFLAGS = 
    ifeq ($(optlevel),DEBUG)
       CFLAGS = -g -Wall -L/usr/local/opt/openblas/lib -I/usr/local/opt/openblas/include -L/usr/local/opt/lapack/lib -I/usr/local/opt/lapack/insude
       CXXFLAGS = -g -Wall
@@ -25,6 +26,7 @@ else ifeq ($(findstring cab,$(HOSTNAME)),cab)
    MPICXX = mpiicpc
    MPIF90 = mpif90
    LFLAGS = -lm
+   EXTRAFLAGS = 
    ifeq ($(optlevel),DEBUG)
       CFLAGS = -g -Wall
       CXXFLAGS = -g -Wall
@@ -40,6 +42,7 @@ else ifeq ($(findstring vulcan,$(HOSTNAME)),vulcan)
    MPICXX = mpixlcxx
    MPIF90 = mpixlf90
    LFLAGS = -lm
+   EXTRAFLAGS = 
    ifeq ($(optlevel),DEBUG)
       CFLAGS = -g -Wall
       CXXFLAGS = -g -Wall
@@ -54,6 +57,7 @@ else ifeq ($(shell uname -s),Linux)
    MPICXX = mpiCC
    MPIF90 = mpif90
    LFLAGS = -lm
+   EXTRAFLAGS = /usr/lib/x86_64-linux-gnu/liblapack.a /usr/lib/x86_64-linux-gnu/liblapacke.a
    ifeq ($(optlevel),DEBUG)
       CFLAGS = -g -Wall
       CXXFLAGS = -g -Wall
@@ -68,6 +72,7 @@ else
    MPICXX = mpiCC
    MPIF90 = mpif90
    LFLAGS = -lm
+   EXTRAFLAGS = 
    ifeq ($(optlevel),DEBUG)
       CFLAGS = -g -Wall
       CXXFLAGS = -g -Wall
@@ -96,15 +101,15 @@ xbraid: ./xbraid/braid/*.c
 
 crowd: src/main.c $(BRAID_LIB_FILE)
 	@echo "Building" $@ "..."
-	$(MPICC) $(CFLAGS) -L. -llapacke -llapack -lopenblas -lgfortran $(BRAID_FLAGS) -o crowd src/main.c $(BRAID_LIB_FILE) $(LFLAGS)
+	$(MPICC) $(CFLAGS) -L. -llapacke -llapack -lopenblas -lgfortran $(BRAID_FLAGS) -o crowd src/main.c $(BRAID_LIB_FILE) $(LFLAGS) $(EXTRAFLAGS)
 
 utils: src/utils.c $(BRAID_LIB_FILE)
 	@echo "Building" $@ "..."
-	$(MPICC) $(CFLAGS) -L. -llapacke -llapack -lopenblas -lgfortran $(BRAID_FLAGS) -o utils src/utils.c $(BRAID_LIB_FILE) $(LFLAGS)
+	$(MPICC) $(CFLAGS) -L. -llapacke -llapack -lopenblas -lgfortran $(BRAID_FLAGS) -o utils src/utils.c $(BRAID_LIB_FILE) $(LFLAGS) $(EXTRAFLAGS)
 
 model_problem: src/model_problem.c $(BRAID_LIB_FILE)
 	@echo "Building" $@ "..."
-	$(MPICC) $(CFLAGS) -L. -llapacke -llapack -lopenblas -lgfortran $(BRAID_FLAGS) -o utils src/model_problem.c $(BRAID_LIB_FILE) $(LFLAGS)
+	$(MPICC) $(CFLAGS) -L. -llapacke -llapack -lopenblas -lgfortran $(BRAID_FLAGS) -o utils src/model_problem.c $(BRAID_LIB_FILE) $(LFLAGS) $(EXTRAFLAGS)
 
 clean:
 	rm -f *.out.*
