@@ -98,6 +98,10 @@ crowd: src/main.c $(BRAID_LIB_FILE)
 	@echo "Building" $@ "..."
 	$(MPICC) $(CFLAGS) -L. -llapacke -llapack -lopenblas -lgfortran $(BRAID_FLAGS) -o crowd src/main.c $(BRAID_LIB_FILE) $(LFLAGS)
 
+utils: src/utils.c $(BRAID_LIB_FILE)
+	@echo "Building" $@ "..."
+	$(MPICC) $(CFLAGS) -L. -llapacke -llapack -lopenblas -lgfortran $(BRAID_FLAGS) -o utils src/utils.c $(BRAID_LIB_FILE) $(LFLAGS)
+
 clean:
 	rm -f *.out.*
 	rm -f *.o crowd
