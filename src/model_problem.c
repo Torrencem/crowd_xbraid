@@ -74,97 +74,94 @@ typedef struct _braid_App_struct {
     double **w;  /* Adjoint vectors at each time point on my proc */
     double *u0;  /* Initial condition */
     double *scr; /* Scratch space (enough for 3 spatial vectors) */
-
 } my_App;
 
 /* Define the state vector at one time-step */
 typedef struct _braid_Vector_struct {
-    double *values; /* Holds the R^M state vector (u_1, u_2,...,u_M) */
-
+    Vector u;
+    Vector v;
+    Vector w;
 } my_Vector;
 
-void vec_scale(int size, double alpha, double *x) {
-    int i;
-    for (i = 0; i < size; i++) {
-        x[i] = alpha * x[i];
+double left_boundary_solution_u(const double t) {
+    return 0.0;
+}
+
+double right_boundary_solution_u(const double t) {
+    return 1.0;
+}
+
+double left_boundary_solution_v(const double t) {
+    return 0.0;
+}
+
+double right_boundary_solution_v(const double t) {
+    return 0.0;
+}
+
+void compute_W_matrix(const double *w, const int n, Vector *WL, Vector *W, Vector *WU) {
+    // Set WL
+    *WL = zero_vector(n - 1);
+    for (int i = 0; i < n - 1; i++) {
+        (*WL)[i] = -w[i + 1];
+    }
+
+    // Set W
+    *W = zero_vector(n);
+    // Middle indices
+    for (int i = 1; i < n - 2; i++) {
+        (*W)[i] = 2 + w[i - 1] - w[i + 1];
+    }
+    // Edge cases
+    (*W)[0] = w[1] + 2;
+    // Last element of W
+    (*W)[n - 1] = 2 - w[n - 2];
+
+    // Set WU
+    *WU = zero_vector(n - 1);
+    for (int i = 0; i < n - 1; i++) {
+        (*WL)[i] = w[i];
     }
 }
 
-/*--------------------------------------------------------------------------
- * KKT component routines
- *--------------------------------------------------------------------------*/
+Vector compute_b_vector(const int n, const double *w, const double t) {
+    double vleft = left_boundary_solution_v(t);
+    double vright = right_boundary_solution_v(t);
+    double wleft = w[0];
+    double wright = w[n - 1];
+    Vector ret = zero_vector(n);
+    ret[0] = -vleft * wleft;
+    ret[n - 1] = vright * wright;
+    return ret;
+}
 
-/* This applies the inverse of a constant tridiagonal matrix A = [al ac au] */
-
-void apply_AInverse(double ac, double al, double au, int M, double *u,
-                    double *scr) {
-    double *a = scr;
-    double *w = a + M;
-    double *f = w + M;
-    double li;
-    int i;
-
-    //   /* RDF HACK Temporarily let A=I */
-    //   return;
-
-    /* Find elements of LU decomposition of A and solve Lw = f(=u) */
-    vec_copy(M, u, f);
-    w[0] = f[0];
-    a[0] = ac;
-    for (i = 1; i < M; i++) {
-        li = al / a[i - 1];
-        a[i] = a[0] - au * li;
-        w[i] = f[i] - li * w[i - 1];
+// u must be allocated before calling
+Vector apply_Phi(my_App *app, my_Vector *vec, double t, double dt) {
+    Vector u_new = zero_vector(app->npoints);
+    double beta = (dt / (2.0 * app->dx));
+    // Space Boundary Conditions
+    // j = 0
+    u_new[0] = vec->u[0] +
+        beta *
+        ((vec->u[0]) * (vec->v[1] - left_boundary_solution_v(t)) +
+         (vec->v[0]) * (vec->u[1] - left_boundary_solution_u(t)));
+    // j = app->npoints
+    int n = app->npoints - 1;
+    u_new[n] = vec->u[n] +
+        beta *
+        ((vec->u[n]) * (right_boundary_solution_v(t) - vec->v[n - 1]) +
+         (vec->v[n]) * (right_boundary_solution_u(t) - vec->u[n - 1]));
+    // Non-Boundary points
+    for (int j = 1; j < n; j++) {
+        double uprev = vec->u[j];
+        u_new[j] = uprev +
+            beta * 
+            ((uprev) * (vec->v[j + 1] - vec->v[j - 1]) +
+             (vec->v[j]) * (vec->u[j + 1] - vec->u[j - 1]));
     }
-
-    /* Now solve Uu = w */
-    u[M - 1] = w[M - 1] / a[M - 1];
-    for (i = M - 2; i >= 0; i--) {
-        u[i] = (w[i] - au * u[i + 1]) / a[i];
-    }
+    return u_new;
 }
 
-/* This is the application of A inverse*/
-
-void apply_Phi(double dt, double dx, double nu, int M, double *u, double *scr) {
-    apply_AInverse((1 + 2 * b(dt, dx, nu)), (-g(dt, dx) - b(dt, dx, nu)),
-                   (g(dt, dx) - b(dt, dx, nu)), M, u, scr);
-}
-
-/*This is the application of A inverse transpose*/
-
-void apply_PhiAdjoint(double dt, double dx, double nu, int M, double *u,
-                      double *scr) {
-    apply_AInverse((1 + 2 * b(dt, dx, nu)), (g(dt, dx) - b(dt, dx, nu)),
-                   (-g(dt, dx) - b(dt, dx, nu)), M, u, scr);
-}
-
-/*------------------------------------*/
-
-void apply_Uinv(double dt, double dx, int M, double *u) {
-    vec_scale(M, 1 / (dx * dt), u);
-}
-
-/*------------------------------------*/
-
-void apply_Vinv(double dt, double dx, double alpha, int M, double *v) {
-    vec_scale(M, 1 / (alpha * dx * dt), v);
-}
-
-/*------------------------------------*/
-
-void apply_D(double dt, double dx, double nu, int M, double *v, double *scr) {
-    apply_Phi(dt, dx, nu, M, v, scr);
-    vec_scale(M, dt, v);
-}
-
-/*------------------------------------*/
-
-void apply_DAdjoint(double dt, double dx, double nu, int M, double *v,
-                    double *scr) {
-    apply_PhiAdjoint(dt, dx, nu, M, v, scr);
-    vec_scale(M, dt, v);
-}
 
 /*------------------------------------*/
 

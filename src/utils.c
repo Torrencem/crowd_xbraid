@@ -55,6 +55,13 @@ void matrix_axpy(const int m, const int n, const double alpha, const Matrix a,
     }
 }
 
+void vec_scale(const int size, const double alpha, Vector x) {
+    int i;
+    for (i = 0; i < size; i++) {
+        x[i] = alpha * x[i];
+    }
+}
+
 // x should be of size n
 inline void matmul(const Matrix a, const int m, const int n, Vector *x) {
     double *y = calloc(m, sizeof(double));
