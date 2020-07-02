@@ -35,32 +35,33 @@ int solve_tridiag_system(Vector KL, Vector K, Vector KU, const int n,
     return ret;
 }
 
+#if 0
 int main() {
-    /* int N = 3; */
-    /* int M = 4; */
-    /*  */
-    /* Matrix A = zero_matrix(M, N); */
-    /*  */
-    /* for (int i = 0; i < 3; i++) { */
-    /*     set_element(A, N, M, i, i, 1); */
-    /* } */
-    /*  */
-    /* double x[4] = {5.0, 3.0, 1.0, -1.0}; */
-    /* double *x_ptr = x; */
-    /*  */
-    /* matmul(A, M, N, &x_ptr); */
-    /*  */
-    /* printf("A = ["); */
-    /* for (int i = 0; i < N * M; i++) { */
-    /*     printf("%f,", A[i]); */
-    /* } */
-    /* printf("]\n"); */
-    /*  */
-    /* printf("x = ["); */
-    /* for (int i = 0; i < M; i++) { */
-    /*     printf("%f,", x_ptr[i]); */
-    /* } */
-    /* printf("]\n"); */
+    int N = 3;
+    int M = 4;
+
+    Matrix A = zero_matrix(M, N);
+
+    for (int i = 0; i < 3; i++) {
+        set_element(A, N, M, i, i, 1);
+    }
+
+    double x[4] = {5.0, 3.0, 1.0, -1.0};
+    double *x_ptr = x;
+
+    matmul(A, M, N, &x_ptr);
+
+    printf("A = [");
+    for (int i = 0; i < N * M; i++) {
+        printf("%f,", A[i]);
+    }
+    printf("]\n");
+
+    printf("x = [");
+    for (int i = 0; i < M; i++) {
+        printf("%f,", x_ptr[i]);
+    }
+    printf("]\n");
 
     double KL[3] = {2, 2, 3};
     double K[4] = {1, 1, 5, 1};
@@ -73,3 +74,4 @@ int main() {
     }
     printf("\n");
 }
+#endif
