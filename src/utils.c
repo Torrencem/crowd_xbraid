@@ -4,6 +4,12 @@
 
 #include "string.h"
 
+#ifdef NOINLINE
+#define utils_inline
+#else
+#define utils_inline inline
+#endif
+
 typedef double *Matrix;
 typedef double *Vector;
 
@@ -24,9 +30,9 @@ Vector zero_vector(const int size) {
     return result;
 }
 
-inline void matrix_destroy(Matrix a) { free(a); }
+void matrix_destroy(Matrix a) { free(a); }
 
-inline void vec_destroy(Vector a) { free(a); }
+void vec_destroy(Vector a) { free(a); }
 
 void matrix_copy(const int m, const int n, const Matrix a, Matrix b) {
     memcpy(b, a, m * n * sizeof(double));
@@ -36,9 +42,15 @@ void vec_copy(const int size, const double *a, double *b) {
     memcpy(b, a, size * sizeof(double));
 }
 
-inline void set_element(Matrix a, const int m, const int n, const int i,
+// i is the row, j is the column
+utils_inline void set_element(Matrix a, const int m, const int n, const int i,
                         const int j, const double val) {
-    a[i * m + j] = val;
+    a[i * n + j] = val;
+}
+
+utils_inline double get_element(const Matrix a, const int m, const int n, const int i,
+                        const int j) {
+    return a[i * n + j];
 }
 
 void vec_axpy(const int size, const double alpha, const Vector x,
@@ -82,70 +94,99 @@ Matrix tridiag_to_matrix(const Vector al, const Vector a, const Vector au, const
 }
 
 // x should be of size n
-inline void matmul(const Matrix a, const int m, const int n, Vector *x) {
+utils_inline void matmul(const Matrix a, const int m, const int n, Vector *x) {
     double *y = calloc(m, sizeof(double));
     cblas_dgemv(CblasRowMajor, CblasNoTrans, m, n, 1.0, a, n, *x, 1, 0.0, y, 1);
     *x = y;
 }
 
 // x should be of size x. al, a, and au should be of length n - 1, n, and n - 1 respectively
-void matmul_tridiag(const Vector al, const Vector a, const Vector au, const int n, Vector *x) {
+utils_inline void matmul_tridiag(const Vector al, const Vector a, const Vector au, const int n, Vector *x) {
     Matrix a_as_mat = tridiag_to_matrix(al, a, au, n);
     matmul(a_as_mat, n, n, x);
 }
 
 // Ku = v, solve for u, K is tridiagonal
-int solve_tridiag_system(Vector KL, Vector K, Vector KU, const int n,
+utils_inline int solve_tridiag_system(Vector KL, Vector K, Vector KU, const int n,
                          Vector v) {
     int ret = LAPACKE_dgtsv(LAPACK_ROW_MAJOR, n, 1, KL, K, KU, v, 1);
     return ret;
 }
 
-// TODO: Turn these into tests, include wolfram alpha link (like https://www.wolframalpha.com/input/?i=%7B%7B1%2C+2%2C+0%2C+0%7D%2C+%7B2%2C+1%2C+2%2C+0%7D%2C+%7B0%2C+2%2C+5%2C+2%7D%2C+%7B0%2C+0%2C+3%2C+1%7D%7D+*+%7B1%2C+2%2C+3%2C+4%7D)
-#if 0
-int main() {
-    /* int N = 3; */
-    /* int M = 4; */
-    /*  */
-    /* Matrix A = zero_matrix(M, N); */
-    /*  */
-    /* for (int i = 0; i < 3; i++) { */
-    /*     set_element(A, N, M, i, i, 1); */
-    /* } */
-    /*  */
-    /* double x[4] = {5.0, 3.0, 1.0, -1.0}; */
-    /* double *x_ptr = x; */
-    /*  */
-    /* matmul(A, M, N, &x_ptr); */
-    /*  */
-    /* printf("A = ["); */
-    /* for (int i = 0; i < N * M; i++) { */
-    /*     printf("%f,", A[i]); */
-    /* } */
-    /* printf("]\n"); */
-    /*  */
-    /* printf("x = ["); */
-    /* for (int i = 0; i < M; i++) { */
-    /*     printf("%f,", x_ptr[i]); */
-    /* } */
-    /* printf("]\n"); */
-    /*  */
+#ifdef TESTS
+#include <assert.h>
+#include <math.h>
+
+void test_row_major_set_get() {
+    int N = 3;
+    int M = 4;
+    Matrix A = zero_matrix(M, N);
+
+    set_element(A, M, N, 0, 1, 1.0);
+    set_element(A, M, N, 1, 0, 2.0);
+    set_element(A, M, N, 1, 1, 3.0);
+    assert(get_element(A, M, N, 0, 1) == 1.0);
+    assert(get_element(A, M, N, 1, 0) == 2.0);
+
+    assert(A[1] == 1.0);
+    assert(A[3] == 2.0);
+    assert(A[4] == 3.0);
+}
+
+void test_simple_matmul() {
+    int N = 3;
+    int M = 4;
+    Matrix A = zero_matrix(M, N);
+
+    set_element(A, M, N, 0, 0, 2.0);
+    set_element(A, M, N, 0, 1, 1.0);
+    set_element(A, M, N, 1, 1, -1.0);
+
+    double x_arr[4] = {5.0, 3.0, 1.0, -1.0};
+    double *x = x_arr;
+
+    matmul(A, M, N, &x);
+
+    assert(x[0] == 13.0);
+    assert(x[1] == -3.0);
+    assert(x[2] == 0.0);
+    assert(x[3] == 0.0);
+}
+
+double EPSILON = 1e-5;
+
+void test_tridiag_solve() {
+    // https://www.wolframalpha.com/input/?i=%7B%7B1%2C+2%2C+0%2C+0%7D%2C+%7B2%2C+1%2C+2%2C+0%7D%2C+%7B0%2C+2%2C+5%2C+2%7D%2C+%7B0%2C+0%2C+3%2C+1%7D%7D+*+%7B3%2C+14%2C+-15%2C+9%7D
     double KL[3] = {2, 2, 3};
     double K[4] = {1, 1, 5, 1};
     double KU[3] = {2, 2, 2};
-    double v[4] = {14, 28, 27, 13};
-    /* int info = solve_tridiag_system(KL, K, KU, 4, v); */
-    /* printf("Returned: %i\n", info); */
-    /* for (int i = 0; i < 4; i++) { */
-    /*     printf("%f,", v[i]); */
-    /* } */
-    /* printf("\n"); */
-    double x[4] = {1, 2, 3, 4};
-    double *x_ptr = x;
-    matmul_tridiag(KL, K, KU, 4, &x_ptr);
-    for (int i = 0; i < 4; i++) {
-        printf("%f, ", x_ptr[i]);
-    }
-    printf("\n");
+    double v[4] = {31, -10, -29, -36};
+    int info = solve_tridiag_system(KL, K, KU, 4, v);
+    assert(info == 0);
+    assert(fabs(v[0] - 3.0) <= EPSILON);
+    assert(fabs(v[1] - 14.0) <= EPSILON);
+    assert(fabs(v[2] - -15.0) <= EPSILON);
+    assert(fabs(v[3] - 9.0) <= EPSILON);
 }
+
+void test_tridiag_mul() {
+    double KL[3] = {2, 2, 3};
+    double K[4] = {1, 1, 5, 1};
+    double KU[3] = {2, 2, 2};
+    double x_arr[4] = {3.0, 14.0, -15.0, 9.0};
+    double *x = x_arr;
+    matmul_tridiag(KL, K, KU, 4, &x);
+    assert(fabs(x[0] - 31.0) <= EPSILON);
+    assert(fabs(x[1] - -10.0) <= EPSILON);
+    assert(fabs(x[2] - -29.0) <= EPSILON);
+    assert(fabs(x[3] - -36.0) <= EPSILON);
+}
+
+int main() {
+    test_row_major_set_get();
+    test_simple_matmul();
+    test_tridiag_solve();
+    test_tridiag_mul();
+}
+
 #endif

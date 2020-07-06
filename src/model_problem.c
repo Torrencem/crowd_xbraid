@@ -340,7 +340,7 @@ int my_TriSolve(braid_App app, braid_Vector uleft, braid_Vector uright,
     compute_L_matrix(app, u_new, app->mspace, &LL, &L, &LU, dt, t);
     Vector Luw = zero_vector(app->mspace);
     vec_copy(app->mspace, uright->w, Luw);
-    multiply_tridiagonal(LL, L, LU, &Luw);
+    matmul_tridiag(LL, L, LU, app->mspace, &Luw);
     // Matrix
 
     // Compute w

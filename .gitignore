@@ -3,3 +3,5 @@ crowd
 utils
 model_problem
 libgfortran.a
+tests
+**/*.dSYM/*

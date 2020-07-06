@@ -23,3 +23,7 @@ If the build fails (probably on Mac) because of "-lgfortran", then try locating 
 Before committing code changes, please run:
 
     make fmt
+
+To run the tests for the utility functions, run:
+
+    make test

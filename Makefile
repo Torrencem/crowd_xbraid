@@ -2,6 +2,9 @@
 # Imported from makefile.inc in XBraid repository
 HOSTNAME := $(shell hostname)
 
+test:
+	optlevel = DEBUG
+
 ifeq ($(shell uname -s), Darwin)
    # for Jacob's MacBook running Homebrew 
    # Need to specifically include lstdc++ (!!)
@@ -107,13 +110,18 @@ utils: src/utils.c $(BRAID_LIB_FILE)
 	@echo "Building" $@ "..."
 	$(MPICC) $(CFLAGS) -L. -llapacke -llapack -lopenblas -lgfortran $(BRAID_FLAGS) -o utils src/utils.c $(BRAID_LIB_FILE) $(LFLAGS) $(EXTRAFLAGS)
 
+test: src/utils.c $(BRAID_LIB_FILE)
+	@echo "Running tests in utils.c..."
+	$(MPICC) -D TESTS -D NOINLINE $(CFLAGS) -Wextra -L. -llapacke -llapack -lopenblas -lgfortran $(BRAID_FLAGS) -o tests src/utils.c $(BRAID_LIB_FILE) $(LFLAGS) $(EXTRAFLAGS) -g -O0
+	./tests
+
 model_problem: src/model_problem.c $(BRAID_LIB_FILE)
 	@echo "Building" $@ "..."
 	$(MPICC) $(CFLAGS) -L. -llapacke -llapack -lopenblas -lgfortran $(BRAID_FLAGS) -o utils src/model_problem.c $(BRAID_LIB_FILE) $(LFLAGS) $(EXTRAFLAGS)
 
 clean:
 	rm -f *.out.*
-	rm -f *.o crowd utils model_problem
+	rm -f *.o crowd utils model_problem tests
 
 fmt: src/*.c
 	for file in $^ ; do \

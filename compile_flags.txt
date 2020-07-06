@@ -9,3 +9,4 @@
 -I/usr/local/opt/openblas/include
 -L/usr/local/opt/lapack/lib
 -I/usr/local/opt/lapack/include
+-D TESTS
