@@ -84,7 +84,7 @@ double left_boundary_solution_v(const double t) { return 0.0; }
 
 double right_boundary_solution_v(const double t) { return 0.0; }
 
-double initial_condition_u(const double x) { return x < 0.5 ? 0.0 : 1.0; }
+double initial_condition_u(const double x) { return 0.25 * x; }
 
 double initial_condition_v(const double x) { return 0.0; }
 
@@ -160,21 +160,45 @@ Vector compute_b_vector(const int n, const double *w, const double t) {
 Vector apply_Phi(const my_App *app, const Vector u, const Vector v,
                  const double t, const double dt) {
     Vector u_new = zero_vector(app->mspace);
+#ifdef MODEL_BACKWARDS
+    double beta = (dt / (app->dx));
+#else
     double beta = (dt / (2.0 * app->dx));
+#endif
+
     // Space Boundary Conditions
     // j = 0
+#ifdef MODEL_BACKWARDS
+    u_new[0] = u[0] + beta * ((u[0]) * (v[0] - left_boundary_solution_v(t)) +
+                              (v[0]) * (u[0] - left_boundary_solution_u(t)));
+#else
     u_new[0] = u[0] + beta * ((u[0]) * (v[1] - left_boundary_solution_v(t)) +
                               (v[0]) * (u[1] - left_boundary_solution_u(t)));
+#endif
+
     // j = app->mspace
+#ifdef MODEL_BACKWARDS
+    int n = app->mspace - 1;
+    u_new[n] =
+        u[n] + beta * ((u[n]) * (v[n] - v[n - 1]) +
+                       (v[n]) * (u[n] - u[n - 1]));
+#else
     int n = app->mspace - 1;
     u_new[n] =
         u[n] + beta * ((u[n]) * (right_boundary_solution_v(t) - v[n - 1]) +
                        (v[n]) * (right_boundary_solution_u(t) - u[n - 1]));
+#endif
+
     // Non-Boundary points
     for (int j = 1; j < n; j++) {
         double uprev = u[j];
+#ifdef MODEL_BACKWARDS
         u_new[j] = uprev + beta * ((uprev) * (v[j + 1] - v[j - 1]) +
                                    (v[j]) * (u[j + 1] - u[j - 1]));
+#else
+        u_new[j] = uprev + beta * ((uprev) * (v[j] - v[j - 1]) +
+                                   (v[j]) * (u[j] - u[j - 1]));
+#endif
     }
     return u_new;
 }
@@ -504,11 +528,11 @@ int main(int argc, char *argv[]) {
 
     /* Define space domain. Space domain is between 0 and 1, mspace defines the
      * number of steps */
-    mspace = 8;
-    ntime = 256;
+    mspace = 16;
+    ntime = 16;
 
     /* Define some Braid parameters */
-    max_levels = 30;
+    max_levels = 2;
     min_coarse = 1;
     nrelax = 1;
     nrelaxc = 10;
