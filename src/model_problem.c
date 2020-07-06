@@ -113,9 +113,9 @@ void compute_W_matrix(const double *w, const int n, Vector *WL, Vector *W, Vecto
         (*W)[i] = 2 + w[i - 1] - w[i + 1];
     }
     // Edge cases
-    (*W)[0] = w[1] + 2;
+    (*W)[0] = -w[1] + 2;
     // Last element of W
-    (*W)[n - 1] = 2 - w[n - 2];
+    (*W)[n - 1] = 2 + w[n - 2];
 
     // Set WU
     *WU = zero_vector(n - 1);
