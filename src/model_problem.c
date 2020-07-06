@@ -84,6 +84,14 @@ double left_boundary_solution_v(const double t) { return 0.0; }
 
 double right_boundary_solution_v(const double t) { return 0.0; }
 
+double initial_condition_u(const double x) {
+    return x < 0.5 ? 0.0 : 1.0;
+}
+
+double initial_condition_v(const double x) {
+    return 0.0;
+}
+
 void compute_W_matrix(const my_App *app, const double *w, const int n,
                       Vector *WL, Vector *W, Vector *WU, const double dt) {
     // Set WL
@@ -153,27 +161,27 @@ Vector compute_b_vector(const int n, const double *w, const double t) {
     return ret;
 }
 
-Vector apply_Phi(const my_App *app, const my_Vector *vec, const double t,
+Vector apply_Phi(const my_App *app, const Vector u, const Vector v, const double t,
                  const double dt) {
-    Vector u_new = zero_vector(app->npoints);
+    Vector u_new = zero_vector(app->mspace);
     double beta = (dt / (2.0 * app->dx));
     // Space Boundary Conditions
     // j = 0
-    u_new[0] = vec->u[0] +
-               beta * ((vec->u[0]) * (vec->v[1] - left_boundary_solution_v(t)) +
-                       (vec->v[0]) * (vec->u[1] - left_boundary_solution_u(t)));
-    // j = app->npoints
-    int n = app->npoints - 1;
+    u_new[0] = u[0] +
+               beta * ((u[0]) * (v[1] - left_boundary_solution_v(t)) +
+                       (v[0]) * (u[1] - left_boundary_solution_u(t)));
+    // j = app->mspace
+    int n = app->mspace - 1;
     u_new[n] =
-        vec->u[n] +
-        beta * ((vec->u[n]) * (right_boundary_solution_v(t) - vec->v[n - 1]) +
-                (vec->v[n]) * (right_boundary_solution_u(t) - vec->u[n - 1]));
+        u[n] +
+        beta * ((u[n]) * (right_boundary_solution_v(t) - v[n - 1]) +
+                (v[n]) * (right_boundary_solution_u(t) - u[n - 1]));
     // Non-Boundary points
     for (int j = 1; j < n; j++) {
-        double uprev = vec->u[j];
+        double uprev = u[j];
         u_new[j] =
-            uprev + beta * ((uprev) * (vec->v[j + 1] - vec->v[j - 1]) +
-                            (vec->v[j]) * (vec->u[j + 1] - vec->u[j - 1]));
+            uprev + beta * ((uprev) * (v[j + 1] - v[j - 1]) +
+                            (v[j]) * (u[j + 1] - u[j - 1]));
     }
     return u_new;
 }
@@ -202,7 +210,20 @@ int my_TriResidual(braid_App app, braid_Vector uleft, braid_Vector uright,
         dt = t - tprev;
     }
 
-    Vector u_res = apply_Phi(app, uleft, t, dt);
+    Vector u_res;
+    // Compute u
+    if (uleft == NULL) {
+        // Collect initial conditions
+        Vector u = zero_vector(app->mspace);
+        Vector v = zero_vector(app->mspace);
+        for (int x = 0; x < app->mspace; x++) {
+            u[x] = initial_condition_u(x);
+            v[x] = initial_condition_v(x);
+        }
+        u_res = apply_Phi(app, u, v, t, dt);
+    } else {
+        u_res = apply_Phi(app, uleft->u, uleft->v, t, dt);
+    }
     vec_axpy(app->mspace, 1.0, r->u, -1.0, u_res);
 
     Vector v_res = zero_vector(app->mspace);
@@ -255,9 +276,21 @@ int my_TriSolve(braid_App app, braid_Vector uleft, braid_Vector uright,
     } else {
         dt = t - tprev;
     }
-
+    
+    Vector u_new;
     // Compute u
-    Vector u_new = apply_Phi(app, uleft, t, dt);
+    if (uleft == NULL) {
+        // Collect initial conditions
+        Vector u = zero_vector(app->mspace);
+        Vector v = zero_vector(app->mspace);
+        for (int x = 0; x < app->mspace; x++) {
+            u[x] = initial_condition_u(x);
+            v[x] = initial_condition_v(x);
+        }
+        u_new = apply_Phi(app, u, v, t, dt);
+    } else {
+        u_new = apply_Phi(app, uleft->u, uleft->v, t, dt);
+    }
 
     // Compute v
     Vector v_new = zero_vector(app->mspace);
