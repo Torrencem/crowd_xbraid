@@ -7,7 +7,7 @@
 #ifdef NOINLINE
 #define utils_inline
 #else
-#define utils_inline inline
+#define utils_inline extern inline
 #endif
 
 typedef double *Matrix;
