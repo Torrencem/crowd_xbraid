@@ -330,23 +330,26 @@ int my_TriSolve(braid_App app, braid_Vector uleft, braid_Vector uright,
     Vector u_new = apply_Phi(app, uleft, t, dt);
 
     // Compute v
-    Vector RHS = zero_vector(app->mspace);
-    vec_axpy(app->mspace, -1.0, uright->w, 1.0, RHS);
-    vec_axpy(app->mspace, 2*dx*dt, u_new, 1.0, RHS);
     vec_axpy(app->mspace, -1.0, compute_b_vector(app->mspace, uright->w, t), 1.0, RHS);
     Vector LL = NULL;
     Vector L = NULL;
     Vector LU = NULL;
     compute_L_matrix(app, u_new, app->mspace, &LL, &L, &LU, dt, t);
-    Vector Luw = zero_vector(app->mspace);
-    vec_copy(app->mspace, uright->w, Luw);
-    multiply_tridiagonal(LL, L, LU, &Luw);
-    // Matrix
+    Vector v_new = zero_vector(app->mspace);
+    vec_copy(app->mspace, uright->w, v_new);
+    multiply_tridiagonal(LL, L, LU, &v_new);
+    vec_scale(app->mspace, 1.0/(2.0*dx*dt), v_new);
 
     // Compute w
     Vector w_new = zero_vector(app->mspace);
-    vec_axpy(app->mspace, -2*dx*dt, v_new, 1.0, w_new);
-    //Matrix
+    vec_copy(app->mspace, uright->w, w_new);
+    // Compute I+Lv
+    compute_L_matrix(app, v_new, app->mspace, &LL, &L, &LU, dt, t);
+    for (int i = 0; i < app->mspace; i++){
+        (*L)[i] += 1;
+    }
+    multiply_tridiagonal(LL, L, LU, &w_new);
+    vec_axpy(app->mspace, -2.0*dx*dt, u_new, 1.0, w_new);
 
     vec_copy(app->mspace, u_new, u->u);
     vec_copy(app->mspace, v_new, u->v);
