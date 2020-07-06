@@ -12,7 +12,7 @@ ifeq ($(shell uname -s), Darwin)
    LFLAGS = -lm -lstdc++
    EXTRAFLAGS = 
    ifeq ($(optlevel),DEBUG)
-      CFLAGS = -g -Wall -L/usr/local/opt/openblas/lib -I/usr/local/opt/openblas/include -L/usr/local/opt/lapack/lib -I/usr/local/opt/lapack/insude
+      CFLAGS = -g -Wall -L/usr/local/opt/openblas/lib -I/usr/local/opt/openblas/include -L/usr/local/opt/lapack/lib -I/usr/local/opt/lapack/insude -D NOINLINE
       CXXFLAGS = -g -Wall
       FORTFLAGS = -Og -Wall
    else
@@ -28,7 +28,7 @@ else ifeq ($(findstring cab,$(HOSTNAME)),cab)
    LFLAGS = -lm
    EXTRAFLAGS = 
    ifeq ($(optlevel),DEBUG)
-      CFLAGS = -g -Wall
+      CFLAGS = -g -Wall -D NOINLINE
       CXXFLAGS = -g -Wall
       FORTFLAGS = -Og -Wall
    else
@@ -44,7 +44,7 @@ else ifeq ($(findstring vulcan,$(HOSTNAME)),vulcan)
    LFLAGS = -lm
    EXTRAFLAGS = 
    ifeq ($(optlevel),DEBUG)
-      CFLAGS = -g -Wall
+      CFLAGS = -g -Wall -D NOINLINE
       CXXFLAGS = -g -Wall
       FORTFLAGS = -Og -Wall
    else
@@ -59,7 +59,7 @@ else ifeq ($(shell uname -s),Linux)
    LFLAGS = -lm
    EXTRAFLAGS = /usr/lib/x86_64-linux-gnu/liblapacke.a /usr/lib/x86_64-linux-gnu/liblapack.a
    ifeq ($(optlevel),DEBUG)
-      CFLAGS = -g -Wall
+      CFLAGS = -g -Wall -D NOINLINE
       CXXFLAGS = -g -Wall
       FORTFLAGS = -g -Wall
    else
@@ -74,7 +74,7 @@ else
    LFLAGS = -lm
    EXTRAFLAGS = 
    ifeq ($(optlevel),DEBUG)
-      CFLAGS = -g -Wall
+      CFLAGS = -g -Wall -D NOINLINE
       CXXFLAGS = -g -Wall
       FORTFLAGS = -g -Wall
    else
