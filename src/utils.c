@@ -37,11 +37,15 @@ void vec_create(int size, double **vec_ptr) { *vec_ptr = zero_vector(size); }
 void vec_destroy(Vector a) { free(a); }
 
 void matrix_copy(const int m, const int n, const Matrix a, Matrix b) {
-    memcpy(b, a, m * n * sizeof(double));
+    for (int i = 0; i < m * n; i++) {
+        b[i] = a[i];
+    }
 }
 
 void vec_copy(const int size, const double *a, double *b) {
-    memcpy(b, a, size * sizeof(double));
+    for (int i = 0; i < size; i++) {
+        b[i] = a[i];
+    }
 }
 
 // i is the row, j is the column
