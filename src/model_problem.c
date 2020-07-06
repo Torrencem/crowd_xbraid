@@ -194,88 +194,6 @@ Vector apply_Phi(const my_App *app, const my_Vector *vec, const double t, const 
 
 /*------------------------------------*/
 
-/* Compute A(u) - f */
-
-int apply_TriResidual(my_App *app, my_Vector *uleft, my_Vector *uright,
-                      my_Vector *f, my_Vector *r, double dt) {
-    double nu = (app->nu);
-    double alpha = (app->alpha);
-    int mspace = (app->mspace);
-    double dx = (app->dx);
-    double *u0 = (app->u0);
-    double *scr = (app->scr);
-
-    double *rtmp, *utmp;
-
-    /* Create temporary vectors */
-    rtmp = zero_vector(mspace);
-    utmp = zero_vector(mspace);
-
-    /* Compute action of center block */
-
-    /* rtmp = U_i^{-1} u */
-    vec_copy(mspace, (r->values), utmp);
-    apply_Uinv(dt, dx, mspace, utmp);
-    vec_copy(mspace, utmp, rtmp);
-
-    /* rtmp = rtmp + D_i V_i^{-1} D_i^T u */
-    vec_copy(mspace, (r->values), utmp);
-    apply_DAdjoint(dt, dx, nu, mspace, utmp, scr);
-    apply_Vinv(dt, dx, alpha, mspace, utmp);
-    apply_D(dt, dx, nu, mspace, utmp, scr);
-    vec_axpy(mspace, 1.0, utmp, 1.0, rtmp);
-
-    /* rtmp = rtmp + Phi_i U_{i-1}^{-1} Phi_i^T u */
-    /* This term is zero at time 0, since Phi_0 = 0 */
-    if (uleft != NULL) {
-        vec_copy(mspace, (r->values), utmp);
-        apply_PhiAdjoint(dt, dx, nu, mspace, utmp, scr);
-        apply_Uinv(dt, dx, mspace, utmp);
-        apply_Phi(dt, dx, nu, mspace, utmp, scr);
-        vec_axpy(mspace, 1.0, utmp, 1.0, rtmp);
-    }
-
-    /* Compute action of west block */
-    if (uleft != NULL) {
-        vec_copy(mspace, (uleft->values), utmp);
-        apply_Uinv(dt, dx, mspace, utmp);
-        apply_Phi(dt, dx, nu, mspace, utmp, scr);
-        vec_axpy(mspace, -1.0, utmp, 1.0, rtmp);
-    }
-
-    /* Compute action of east block */
-    if (uright != NULL) {
-        vec_copy(mspace, (uright->values), utmp);
-        apply_PhiAdjoint(dt, dx, nu, mspace, utmp, scr);
-        apply_Uinv(dt, dx, mspace, utmp);
-        vec_axpy(mspace, -1.0, utmp, 1.0, rtmp);
-    }
-
-    /* No change for index 0 */
-    vec_copy(mspace, u0, utmp);
-    vec_axpy(mspace, -1.0, utmp, 1.0, rtmp);
-    vec_copy(mspace, u0, utmp);
-    apply_Phi(dt, dx, nu, mspace, utmp, scr);
-    vec_axpy(mspace, 1.0, utmp, 1.0, rtmp);
-
-    /* Subtract rhs f */
-    if (f != NULL) {
-        /* rtmp = rtmp - f */
-        vec_axpy(mspace, -1.0, (f->values), 1.0, rtmp);
-    }
-
-    /* Copy temporary residual vector into residual */
-    vec_copy(mspace, rtmp, (r->values));
-
-    /* Destroy temporary vectors */
-    vec_destroy(rtmp);
-    vec_destroy(utmp);
-
-    return 0;
-}
-
-/*------------------------------------*/
-
 /*--------------------------------------------------------------------------
  * TriMGRIT wrapper routines
  *--------------------------------------------------------------------------*/
@@ -297,9 +215,20 @@ int my_TriResidual(braid_App app, braid_Vector uleft, braid_Vector uright,
     } else {
         dt = t - tprev;
     }
-
-    /* Compute residual */
-    apply_TriResidual(app, uleft, uright, f, r, dt);
+    
+    Vector u_res = apply_Phi(app, uleft, t, dt);
+    vec_axpy(app->mspace, 1.0, r->u, -1.0, u_res);
+    
+    Vector v_res = zero_vector(app->mspace);
+    vec_copy(app->mspace, uright->w, v_res);
+    Vector LL = NULL;
+    Vector L = NULL;
+    Vector LU = NULL;
+    compute_L_matrix(app, r->u, app->mspace, &LL, &L, &LU, dt, t);
+    multiply_tridiagonal(LL, L, LU, &v_res);
+    vec_axpy(app->mspace, 2.0*dx*dt, r->v, -1.0, v_res);
+    
+    // TODO: w_res
 
     return 0;
 }
