@@ -20,23 +20,21 @@
  ***********************************************************************EHEADER*/
 
 /**
- * Example:       trischur-adv-diff.c
+ * Example:       model_problem.c
  *
  * Interface:     C
  *
- * Requires:      only C-language support
+ * Requires:      Lapacke
  *
- * Compile with:  make trischur-adv-diff
+ * Compile with:  make model_problem
  *
- * Description:   Solves a linear optimal control problem in time-parallel:
+ * Description:   Solves a multilinear optimal control problem in time-parallel:
  *
- *                min   0.5\int_0^T \int_0^1 (u(x,t)-u0(x))^2+alpha v(x,t)^2
+ *                min   \int_0^T \int_0^1 u(x, t)^2+v(x, t)^2 dx dt
  *dxdt
  *
- *                s.t.  du/dt + du/dx - nu d^2u/dx^2 = v(x,t)
- *                      u(0,t)=u(1,t)=0
- *                      u(x,0)=u0(x)
- **/
+ *                s.t.  du/dt = d/dx(uv)
+**/
 
 #include <math.h>
 #include <stdio.h>
