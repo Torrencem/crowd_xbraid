@@ -2,9 +2,6 @@
 # Imported from makefile.inc in XBraid repository
 HOSTNAME := $(shell hostname)
 
-test:
-	optlevel = DEBUG
-
 ifeq ($(shell uname -s), Darwin)
    # for Jacob's MacBook running Homebrew 
    # Need to specifically include lstdc++ (!!)
