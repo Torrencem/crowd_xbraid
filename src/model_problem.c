@@ -58,8 +58,6 @@
 
 typedef struct _braid_App_struct {
     int myid;     /* Rank of the processor */
-    double alpha; /* Relaxation parameter for objective function, v(x,t) */
-    double nu;    /* Diffusion coefficent, which we take to be large */
     int ntime;    /* Total number of time-steps (starting at time 0) */
     int mspace;   /* Number of space points included in our state vector */
                   /* So including boundaries we have M+2 space points */
@@ -68,10 +66,7 @@ typedef struct _braid_App_struct {
     int ilower;  /* Lower index for my proc */
     int iupper;  /* Upper index for my proc */
     int npoints; /* Number of time points on my proc */
-
-    double **w;  /* Adjoint vectors at each time point on my proc */
-    double *u0;  /* Initial condition */
-    double *scr; /* Scratch space (enough for 3 spatial vectors) */
+    FILE    *ufile, *vfile, *wfile;
 } my_App;
 
 /* Define the state vector at one time-step */
@@ -219,7 +214,18 @@ int my_TriResidual(braid_App app, braid_Vector uleft, braid_Vector uright,
     matmul_tridiag(LL, L, LU, app->mspace, &v_res);
     vec_axpy(app->mspace, 2.0 * app->dx * dt, r->v, -1.0, v_res);
 
-    // TODO: w_res
+    Vector w_res = zero_vector(app->mspace);
+    vec_copy(app->mspace, uright->w, w_res);
+    compute_L_matrix(app, r->v, app->mspace, &LL, &L, &LU, dt, t);
+    for (int i = 0; i < app->mspace; i++) {
+        L[i] += 1;
+    }
+    matmul_tridiag(LL, L, LU, app->mspace, &w_res);
+    vec_axpy(app->mspace, -2.0 * app->dx * dt, r->u, 1.0, w_res);
+
+    vec_copy(app->mspace, u_res, r->u);
+    vec_copy(app->mspace, v_res, r->v);
+    vec_copy(app->mspace, w_res, r->w);
 
     return 0;
 }
@@ -231,12 +237,9 @@ int my_TriResidual(braid_App app, braid_Vector uleft, braid_Vector uright,
 int my_TriSolve(braid_App app, braid_Vector uleft, braid_Vector uright,
                 braid_Vector fleft, braid_Vector fright, braid_Vector f,
                 braid_Vector u, braid_TriStatus status) {
-    double alpha = (app->alpha);
     double dx = (app->dx);
 
     double t, tprev, tnext, dt;
-    double *utmp, scale;
-    int iter;
 
     /* Get the time-step size */
     braid_TriStatusGetTriT(status, &t, &tprev, &tnext);
@@ -250,8 +253,6 @@ int my_TriSolve(braid_App app, braid_Vector uleft, braid_Vector uright,
     Vector u_new = apply_Phi(app, uleft, t, dt);
 
     // Compute v
-    // vec_axpy(app->mspace, -1.0, compute_b_vector(app->mspace, uright->w, t),
-    //          1.0, RHS); // TODO: what's this?
     Vector LL = NULL;
     Vector L = NULL;
     Vector LU = NULL;
@@ -293,11 +294,14 @@ int my_Init(braid_App app, double t, braid_Vector *u_ptr) {
 
     /* Allocate the vector */
     u = (my_Vector *)malloc(sizeof(my_Vector));
-    u->values = zero_vector(mspace);
+    u->u = zero_vector(mspace);
+    u->v = zero_vector(mspace);
+    u->w = zero_vector(mspace);
 
     for (i = 0; i <= mspace - 1; i++) {
-        u->values[i] = ((double)braid_Rand()) / braid_RAND_MAX;
-        //      u->values[i] = 1.0;
+        u->u[i] = ((double)braid_Rand()) / braid_RAND_MAX;
+        u->v[i] = ((double)braid_Rand()) / braid_RAND_MAX;
+        u->w[i] = ((double)braid_Rand()) / braid_RAND_MAX;
     }
 
     *u_ptr = u;
@@ -313,9 +317,13 @@ int my_Clone(braid_App app, braid_Vector u, braid_Vector *v_ptr) {
 
     /* Allocate the vector */
     v = (my_Vector *)malloc(sizeof(my_Vector));
-    u->values = zero_vector(mspace);
-    vec_copy(mspace, (u->values), (v->values));
 
+    u->u = zero_vector(mspace);
+    u->v = zero_vector(mspace);
+    u->w = zero_vector(mspace);
+    vec_copy(mspace, (u->u), (v->u));
+    vec_copy(mspace, (u->v), (v->v));
+    vec_copy(mspace, (u->w), (v->w));
     *v_ptr = v;
 
     return 0;
@@ -324,7 +332,9 @@ int my_Clone(braid_App app, braid_Vector u, braid_Vector *v_ptr) {
 /*------------------------------------*/
 
 int my_Free(braid_App app, braid_Vector u) {
-    free(u->values);
+    free(u->u);
+    free(u->v);
+    free(u->w);
     free(u);
 
     return 0;
@@ -334,117 +344,126 @@ int my_Free(braid_App app, braid_Vector u) {
 
 int my_Sum(braid_App app, double alpha, braid_Vector x, double beta,
            braid_Vector y) {
-    vec_axpy((app->mspace), alpha, (x->values), beta, (y->values));
 
+    vec_axpy((app->mspace), alpha, (x->u), beta, (y->u));
+    vec_axpy((app->mspace), alpha, (x->v), beta, (y->v));
+    vec_axpy((app->mspace), alpha, (x->w), beta, (y->w));
     return 0;
 }
 
 /*------------------------------------*/
 
-int my_SpatialNorm(braid_App app, braid_Vector u, double *norm_ptr) {
-    int i;
-    double dot = 0.0;
-    int mspace = (app->mspace);
-    for (i = 0; i < mspace; i++) {
-        dot += (u->values)[i] * (u->values)[i];
-    }
-    *norm_ptr = sqrt(dot);
-
-    return 0;
-}
-
-/*------------------------------------*/
-
-// ZTODO: Need to compute u from adjoint and it reqires communication
-
-int my_Access(braid_App app, braid_Vector u, braid_AccessStatus astatus) {
-    int done, index, ii;
-    int mspace = (app->mspace);
-
-    /* Print solution to file if simulation is over */
-    braid_AccessStatusGetDone(astatus, &done);
-    if (done) {
-        braid_AccessStatusGetILowerUpper(astatus, &(app->ilower),
-                                         &(app->iupper));
-        (app->npoints) = (app->iupper) - (app->ilower) + 1;
-
-        /* Allocate w array in app */
-        if ((app->w) == NULL) {
-            (app->w) = (double **)calloc((app->npoints), sizeof(double *));
-        }
-
-        braid_AccessStatusGetTIndex(astatus, &index);
-        ii = index - (app->ilower);
-        if (app->w[ii] != NULL) {
-            free(app->w[ii]);
-        }
-        app->w[ii] = zero_vector(mspace);
-        vec_copy(mspace, (u->values), (app->w[ii]));
-    }
-
-#if 0
-   //  Below prints U, V, and W after selected iterations. This can then be
-   //  plotted to show how the space-time solution changes after iterations.
-   char  filename[255];
-   FILE *file;
-   int  iter;
-   braid_AccessStatusGetIter(astatus, &iter);
-   braid_AccessStatusGetTIndex(astatus, &index);
-   /* file format is advec-diff-btcs.out.{iteration #}.{time index} */
-   if(iter%1==0){
-      sprintf(filename, "%s.%04d.%04d", "out/advec-diff-btcs.v.out", iter, index);
-      file = fopen(filename, "w");
-      for(i = 0; i<mspace; i++){
-         if(i<mspace-1){
-            fprintf(file, "%1.14e, ", (u->values)[i]);
-         }
-         else{
-            fprintf(file, "%1.14e", (u->values)[i]);
-         }
-      }
-      fflush(file);
-      fclose(file);
+int
+my_SpatialNorm(braid_App     app,
+               braid_Vector  u,
+               double       *norm_ptr)
+{
+   int i;
+   double dot = 0.0;
+   int mspace = (app->mspace);
+   for (i = 0; i < mspace; i++)
+   {
+      dot += (u->u)[i]*(u->u)[i];
+      dot += (u->v)[i]*(u->v)[i];
+      dot += (u->w)[i]*(u->w)[i];
    }
-#endif
+   *norm_ptr = sqrt(dot);
 
-    return 0;
+   return 0;
 }
 
 /*------------------------------------*/
 
-int my_BufSize(braid_App app, int *size_ptr, braid_BufferStatus bstatus) {
-    *size_ptr = (app->mspace) * sizeof(double);
-    return 0;
+int
+my_Access(braid_App          app,
+          braid_Vector       u,
+          braid_AccessStatus astatus)
+{
+   int   done, index;
+   int   mspace  = (app->mspace);
+
+   /* Print solution to file if simulation is over */
+   braid_AccessStatusGetDone(astatus, &done);
+   if (done)
+   {
+      int  j;
+
+      braid_AccessStatusGetTIndex(astatus, &index);
+
+      fprintf((app->ufile), "%05d: ", index);
+      fprintf((app->vfile), "%05d: ", index);
+      fprintf((app->wfile), "%05d: ", index);
+      for(j = 0; j < (mspace-1); j++)
+      {
+         fprintf((app->ufile), "% 1.14e, ", (u->u[j]));
+         fprintf((app->vfile), "% 1.14e, ", (u->v[j]));
+         fprintf((app->wfile), "% 1.14e, ", (u->w[j]));
+      }
+      fprintf((app->ufile), "% 1.14e\n", (u->u[j]));
+      fprintf((app->vfile), "% 1.14e\n", (u->v[j]));
+      fprintf((app->wfile), "% 1.14e\n", (u->w[j]));
+   }
+
+   return 0;
 }
 
 /*------------------------------------*/
 
-int my_BufPack(braid_App app, braid_Vector u, void *buffer,
-               braid_BufferStatus bstatus) {
-    double *dbuffer = buffer;
-
-    vec_copy((app->mspace), (u->values), dbuffer);
-    braid_BufferStatusSetSize(bstatus, (app->mspace) * sizeof(double));
-
-    return 0;
+int
+my_BufSize(braid_App           app,
+           int                 *size_ptr,
+           braid_BufferStatus  bstatus)
+{
+   *size_ptr = 3*(app->mspace)*sizeof(double);
+   return 0;
 }
 
 /*------------------------------------*/
 
-int my_BufUnpack(braid_App app, void *buffer, braid_Vector *u_ptr,
-                 braid_BufferStatus bstatus) {
-    my_Vector *u = NULL;
-    double *dbuffer = buffer;
+int
+my_BufPack(braid_App           app,
+           braid_Vector        u,
+           void               *buffer,
+           braid_BufferStatus  bstatus)
+{
+   double *dbuffer = buffer;
 
-    /* Allocate memory */
-    u = (my_Vector *)malloc(sizeof(my_Vector));
-    u->values = zero_vector((app->mspace));
+   vec_copy((app->mspace), (u->u), dbuffer);
+   dbuffer += (app->mspace);
+   vec_copy((app->mspace), (u->v), dbuffer);
+   dbuffer += (app->mspace);
+   vec_copy((app->mspace), (u->w), dbuffer);
+   braid_BufferStatusSetSize(bstatus, 3*(app->mspace)*sizeof(double));
 
-    /* Unpack the buffer */
-    vec_copy((app->mspace), dbuffer, (u->values));
+   return 0;
+}
 
-    *u_ptr = u;
-    return 0;
+/*------------------------------------*/
+
+int
+my_BufUnpack(braid_App           app,
+             void               *buffer,
+             braid_Vector       *u_ptr,
+             braid_BufferStatus  bstatus)
+{
+   my_Vector *u = NULL;
+   double    *dbuffer = buffer;
+
+   /* Allocate memory */
+   u = (my_Vector *) malloc(sizeof(my_Vector));
+   vec_create((app->mspace), &(u->u));
+   vec_create((app->mspace), &(u->v));
+   vec_create((app->mspace), &(u->w));
+
+   /* Unpack the buffer */
+   vec_copy((app->mspace), dbuffer, (u->u));
+   dbuffer += (app->mspace);
+   vec_copy((app->mspace), dbuffer, (u->v));
+   dbuffer += (app->mspace);
+   vec_copy((app->mspace), dbuffer, (u->w));
+
+   *u_ptr = u;
+   return 0;
 }
 
 /*--------------------------------------------------------------------------
@@ -457,13 +476,10 @@ int main(int argc, char *argv[]) {
 
     double tstart, tstop, dt, dx, start, end;
     int rank, ntime, mspace, arg_index;
-    double alpha, nu;
     int max_levels, min_coarse, nrelax, nrelaxc, cfactor, maxiter;
     int access_level, print_level;
     double tol;
     double time;
-    double *u0, *scr;
-    int i;
 
     /* Initialize MPI */
     MPI_Init(&argc, &argv);
@@ -473,10 +489,6 @@ int main(int argc, char *argv[]) {
      * number of steps */
     mspace = 8;
     ntime = 256;
-
-    /* Define some optimization parameters */
-    alpha = .005; /* parameter in the objective function */
-    nu = .03;     /* parameter in PDE (used 0.3 in RIPS) */
 
     /* Define some Braid parameters */
     max_levels = 30;
@@ -504,9 +516,6 @@ int main(int argc, char *argv[]) {
                    "time\n");
             printf("  -ntime <ntime>          : Num points in time\n");
             printf("  -mspace <mspace>        : Num points in space\n");
-            printf("  -nu <nu>                : Constant Parameter in PDE  \n");
-            printf("  -alpha <alpha>          : Constant Parameter in "
-                   "Objective Function  \n");
             printf("  -ml <max_levels>        : Max number of braid levels \n");
             printf("  -num  <nrelax>          : Num F-C relaxations\n");
             printf("  -nuc <nrelaxc>          : Num F-C relaxations on "
@@ -530,12 +539,6 @@ int main(int argc, char *argv[]) {
         } else if (strcmp(argv[arg_index], "-ml") == 0) {
             arg_index++;
             max_levels = atoi(argv[arg_index++]);
-        } else if (strcmp(argv[arg_index], "-nu") == 0) {
-            arg_index++;
-            nu = atof(argv[arg_index++]);
-        } else if (strcmp(argv[arg_index], "-alpha") == 0) {
-            arg_index++;
-            alpha = atof(argv[arg_index++]);
         } else if (strcmp(argv[arg_index], "-num") == 0) {
             arg_index++;
             nrelax = atoi(argv[arg_index++]);
@@ -572,17 +575,6 @@ int main(int argc, char *argv[]) {
     tstop = 1.0;  /* End of time domain*/
     dt = (tstop - tstart) / ntime;
 
-    /* Set up initial condition */
-    u0 = zero_vector(mspace);
-    for (i = 0; i < mspace / 2; i++) {
-        u0[i] = 1;
-    }
-    for (i = mspace / 2; i < mspace; i++) {
-        u0[i] = 0;
-    }
-
-    /* Set up scratch space */
-    scr = zero_vector(3 * mspace);
 
     /* Set up the app structure */
     app = (my_App *)malloc(sizeof(my_App));
@@ -590,11 +582,14 @@ int main(int argc, char *argv[]) {
     app->ntime = ntime;
     app->mspace = mspace;
     app->dx = dx;
-    app->nu = nu;
-    app->alpha = alpha;
-    app->w = NULL;
-    app->u0 = u0;
-    app->scr = scr;
+
+    char filename[255];
+    sprintf(filename, "%s.%03d", "modelproblem.out.u", (app->myid));
+    (app->ufile) = fopen(filename, "w");
+    sprintf(filename, "%s.%03d", "modelproblem.out.v", (app->myid));
+    (app->vfile) = fopen(filename, "w");
+    sprintf(filename, "%s.%03d", "modelproblem.out.w", (app->myid));
+    (app->wfile) = fopen(filename, "w");
 
     /* Initialize XBraid */
     braid_InitTriMGRIT(MPI_COMM_WORLD, MPI_COMM_WORLD, dt, tstop, ntime - 1,
@@ -620,130 +615,6 @@ int main(int argc, char *argv[]) {
     start = clock();
     braid_Drive(core);
     end = clock();
-
-    /* Writes solutions to files */
-    if (access_level > 0) {
-        char filename[255];
-        FILE *file;
-        int i, j;
-        double **w = (app->w);
-        double **v;
-        double **u;
-
-        /* Print adjoint w to file */
-        sprintf(filename, "%s.%03d", "trischur-adv-diff.out.w", (app->myid));
-        file = fopen(filename, "w");
-        for (i = 0; i < (app->npoints); i++) {
-            fprintf(file, "%05d: ", ((app->ilower) + i + 1));
-            for (j = 0; j < mspace; j++) {
-                if (j == mspace - 1) {
-                    fprintf(file, "% 1.14e", w[i][j]);
-                } else {
-                    fprintf(file, "% 1.14e, ", w[i][j]);
-                }
-            }
-            fprintf(file, "\n");
-        }
-        fflush(file);
-        fclose(file);
-
-        /* Compute control v from adjoint w and print to file */
-        sprintf(filename, "%s.%03d", "trischur-adv-diff.out.v", (app->myid));
-        file = fopen(filename, "w");
-        v = (double **)malloc(app->npoints * sizeof(double *));
-        for (i = 0; i < app->npoints; i++) {
-            v[i] = zero_vector((app->mspace));
-        }
-        for (i = 0; i < (app->npoints); i++) {
-            vec_copy(mspace, w[i], v[i]);
-            apply_DAdjoint(dt, dx, nu, mspace, v[i], scr);
-            apply_Vinv(dt, dx, alpha, mspace, v[i]);
-
-            fprintf(file, "%05d: ", ((app->ilower) + i + 1));
-            for (j = 0; j < (app->mspace); j++) {
-                if (j == mspace - 1) {
-                    fprintf(file, "% 1.14e", v[i][j]);
-                } else {
-                    fprintf(file, "% 1.14e, ", v[i][j]);
-                }
-            }
-            fprintf(file, "\n");
-        }
-        fflush(file);
-        fclose(file);
-
-        /* Compute state u from adjoint w and print to file */
-        sprintf(filename, "%s.%03d", "trischur-adv-diff.out.u", (app->myid));
-        file = fopen(filename, "w");
-        u = (double **)malloc(app->npoints * sizeof(double *));
-        for (i = 0; i < app->npoints; i++) {
-            u[i] = zero_vector((app->mspace));
-        }
-        for (i = 0; i < (app->npoints); i++) {
-            if (i != app->npoints - 1) {
-                vec_copy(mspace, w[i + 1], u[i]);
-                apply_PhiAdjoint(dt, dx, nu, mspace, u[i], scr);
-                vec_axpy(mspace, -1.0, w[i], 1.0, u[i]);
-                vec_axpy(mspace, dx * dt, u0, 1.0, u[i]);
-                apply_Uinv(dt, dx, mspace, u[i]);
-            } else {
-                vec_copy(mspace, w[i], u[i]);
-                vec_scale(mspace, -1.0, u[i]);
-                vec_axpy(mspace, dx * dt, u0, 1.0, u[i]);
-                apply_Uinv(dt, dx, mspace, u[i]);
-            }
-
-            fprintf(file, "%05d: ", ((app->ilower) + i + 1));
-            for (j = 0; j < mspace; j++) {
-                if (j == mspace - 1) {
-                    fprintf(file, "% 1.14e", u[i][j]);
-                } else {
-                    fprintf(file, "% 1.14e, ", u[i][j]);
-                }
-            }
-            fprintf(file, "\n");
-        }
-        fflush(file);
-        fclose(file);
-
-        /* Print initial guess u0 to file */
-        sprintf(filename, "%s.%03d", "trischur-adv-diff.out.u0", (app->myid));
-        file = fopen(filename, "w");
-        for (j = 0; j < mspace; j++) {
-            if (j != mspace - 1) {
-                fprintf(file, "% 1.14e, ", u0[j]);
-            } else {
-                fprintf(file, "% 1.14e", u0[j]);
-            }
-        }
-        fflush(file);
-        fclose(file);
-
-#if 0
-      // Calculates value of objective function
-      double objective_val=0;
-
-      for(i=0; i<ntime; i++)
-      {
-         for(int j=0; j<mspace; j++)
-         {
-            objective_val += ((u[i][j] - u0[j]) * (u[i][j] - u0[j]) +
-                              alpha*v[i][j]*v[i][j] ) * dx;
-         }
-         objective_val *= dt;
-      }
-      printf("Objective Function Value: %f \n", objective_val);
-#endif
-
-        for (i = 0; i < app->npoints; i++) {
-            vec_destroy(w[i]);
-            vec_destroy(v[i]);
-            vec_destroy(u[i]);
-        }
-        free(w);
-        free(v);
-        free(u);
-    }
 
     /* Print runtime to file (for runtime comparisons)*/
     time = (double)(end - start) / CLOCKS_PER_SEC;
@@ -793,8 +664,6 @@ int main(int argc, char *argv[]) {
     //      apply_TriResidual(app, z, NULL, NULL, e, 1, dt);
     //   }
 
-    vec_destroy(app->u0);
-    vec_destroy(app->scr);
     free(app);
 
     braid_Destroy(core);

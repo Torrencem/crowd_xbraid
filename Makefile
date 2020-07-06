@@ -117,7 +117,7 @@ test: src/utils.c $(BRAID_LIB_FILE)
 
 model_problem: src/model_problem.c $(BRAID_LIB_FILE)
 	@echo "Building" $@ "..."
-	$(MPICC) $(CFLAGS) -L. -llapacke -llapack -lopenblas -lgfortran $(BRAID_FLAGS) -o utils src/model_problem.c $(BRAID_LIB_FILE) $(LFLAGS) $(EXTRAFLAGS)
+	$(MPICC) $(CFLAGS) -L. -llapacke -llapack -lopenblas -lgfortran $(BRAID_FLAGS) -o model_problem src/model_problem.c $(BRAID_LIB_FILE) $(LFLAGS) $(EXTRAFLAGS)
 
 clean:
 	rm -f *.out.*

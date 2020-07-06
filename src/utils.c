@@ -32,6 +32,8 @@ Vector zero_vector(const int size) {
 
 void matrix_destroy(Matrix a) { free(a); }
 
+void vec_create(int size, double **vec_ptr) { *vec_ptr = zero_vector(size); }
+
 void vec_destroy(Vector a) { free(a); }
 
 void matrix_copy(const int m, const int n, const Matrix a, Matrix b) {
