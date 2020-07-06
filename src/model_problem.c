@@ -99,7 +99,7 @@ double right_boundary_solution_v(const double t) {
     return 0.0;
 }
 
-void compute_W_matrix(const double *w, const int n, Vector *WL, Vector *W, Vector *WU) {
+void compute_W_matrix(const my_App *app, const double *w, const int n, Vector *WL, Vector *W, Vector *WU, const double dt) {
     // Set WL
     *WL = zero_vector(n - 1);
     for (int i = 0; i < n - 1; i++) {
@@ -107,20 +107,50 @@ void compute_W_matrix(const double *w, const int n, Vector *WL, Vector *W, Vecto
     }
 
     // Set W
+    double gamma = app->dx * dt;
+    double beta = dt / (2.0 * app->dx);
     *W = zero_vector(n);
     // Middle indices
     for (int i = 1; i < n - 2; i++) {
-        (*W)[i] = 2 + w[i - 1] - w[i + 1];
+        (*W)[i] = 2 * gamma + beta * w[i - 1] - beta * w[i + 1];
     }
     // Edge cases
-    (*W)[0] = -w[1] + 2;
+    (*W)[0] = beta * -w[1] + 2 * gamma;
     // Last element of W
-    (*W)[n - 1] = 2 + w[n - 2];
+    (*W)[n - 1] = gamma * 2 + beta * w[n - 2];
 
     // Set WU
     *WU = zero_vector(n - 1);
     for (int i = 0; i < n - 1; i++) {
         (*WL)[i] = w[i];
+    }
+
+    vec_scale(n - 1, beta, *WL);
+    vec_scale(n - 1, beta, *WU);
+}
+
+void compute_L_matrix(const my_App *app, const double *v, const int n, Vector *LL, Vector *L, Vector *LU, const double dt, const double t) {
+    // Set LL
+    *LL = zero_vector(n - 1);
+    for (int i = 0; i < n - 1; i++) {
+        (*LL)[i] = v[i];
+    }
+
+    // Set L
+    *L = zero_vector(n);
+    // Middle indices
+    for (int i = 1; i < n - 2; i++) {
+        (*L)[i] = v[i + 1] - v[i - 1];
+    }
+    // Edge cases
+    (*L)[0] = v[1] - left_boundary_solution_v(t);
+    // Last element of L
+    (*L)[n - 1] = right_boundary_solution_v(t) - v[n - 2];
+
+    // Set LU
+    *LU = zero_vector(n - 1);
+    for (int i = 0; i < n - 1; i++) {
+        (*LL)[i] = -v[i];
     }
 }
 
@@ -135,8 +165,7 @@ Vector compute_b_vector(const int n, const double *w, const double t) {
     return ret;
 }
 
-// u must be allocated before calling
-Vector apply_Phi(my_App *app, my_Vector *vec, double t, double dt) {
+Vector apply_Phi(const my_App *app, const my_Vector *vec, const double t, const double dt) {
     Vector u_new = zero_vector(app->npoints);
     double beta = (dt / (2.0 * app->dx));
     // Space Boundary Conditions
@@ -305,6 +334,13 @@ int my_TriSolve(braid_App app, braid_Vector uleft, braid_Vector uright,
     vec_axpy(app->mspace, -1.0, uright->w, 1.0, RHS);
     vec_axpy(app->mspace, 2*dx*dt, u_new, 1.0, RHS);
     vec_axpy(app->mspace, -1.0, compute_b_vector(app->mspace, uright->w, t), 1.0, RHS);
+    Vector LL = NULL;
+    Vector L = NULL;
+    Vector LU = NULL;
+    compute_L_matrix(app, u_new, app->mspace, &LL, &L, &LU, dt, t);
+    Vector Luw = zero_vector(app->mspace);
+    vec_copy(app->mspace, uright->w, Luw);
+    multiply_tridiagonal(LL, L, LU, &Luw);
     // Matrix
 
     // Compute w
