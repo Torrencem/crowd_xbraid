@@ -130,8 +130,8 @@ Vector compute_b_vector(const int n, const double *w, const double t) {
     double wleft = w[0];
     double wright = w[n - 1];
     Vector ret = zero_vector(n);
-    ret[0] = -vleft * wleft;
-    ret[n - 1] = vright * wright;
+    ret[0] = vleft * wleft;
+    ret[n - 1] = - vright * wright;
     return ret;
 }
 
@@ -283,7 +283,6 @@ int my_TriSolve(braid_App app, braid_Vector uleft, braid_Vector uright,
                 braid_Vector fleft, braid_Vector fright, braid_Vector f,
                 braid_Vector u, braid_TriStatus status) {
     double alpha = (app->alpha);
-    int mspace = (app->mspace);
     double dx = (app->dx);
 
     double t, tprev, tnext, dt;
@@ -298,30 +297,27 @@ int my_TriSolve(braid_App app, braid_Vector uleft, braid_Vector uright,
         dt = t - tprev;
     }
 
-    /* Create temporary vector */
-    utmp = zero_vector(mspace);
+    // Compute u
+    Vector u_new = apply_Phi(app, uleft, t, dt);
 
-    for (iter = 0; iter < 1; iter++) {
-        /* Initialize temporary solution vector */
-        vec_copy(mspace, (u->values), utmp);
+    // Compute v
+    Vector RHS = zero_vector(app->mspace);
+    vec_axpy(app->mspace, -1.0, uright->w, 1.0, RHS);
+    vec_axpy(app->mspace, 2*dx*dt, u_new, 1.0, RHS);
+    vec_axpy(app->mspace, -1.0, compute_b_vector(app->mspace, uright->w, t), 1.0, RHS);
+    // Matrix
 
-        /* Compute residual (store in u) */
-        my_TriResidual(app, uleft, uright, f, u, status);
+    // Compute w
+    Vector w_new = zero_vector(app->mspace);
+    vec_axpy(app->mspace, -2*dx*dt, v_new, 1.0, w_new);
+    //Matrix
 
-        /* Use diagonal of Schur-complement to scale residual */
-        if (uleft != NULL) {
-            scale = (1 / (dx * dt)) * (2 + dt * dt / alpha);
-        } else {
-            scale = (1 / (dx * dt)) * (1 + dt * dt / alpha);
-        }
-        vec_axpy(mspace, 1.0, utmp, -1.0 / scale, (u->values));
-    }
+    vec_copy(app->mspace, u_new, u->u);
+    vec_copy(app->mspace, v_new, u->v);
+    vec_copy(app->mspace, w_new, u->w);
 
     /* no refinement */
     braid_TriStatusSetRFactor(status, 1);
-
-    /* Destroy temporary vectors */
-    vec_destroy(utmp);
 
     return 0;
 }
