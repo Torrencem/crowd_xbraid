@@ -218,8 +218,8 @@ int my_TriResidual(braid_App app, braid_Vector uleft, braid_Vector uright,
     Vector L = NULL;
     Vector LU = NULL;
     compute_L_matrix(app, r->u, app->mspace, &LL, &L, &LU, dt, t);
-    multiply_tridiagonal(LL, L, LU, &v_res);
-    vec_axpy(app->mspace, 2.0 * dx * dt, r->v, -1.0, v_res);
+    matmul_tridiag(LL, L, LU, app->mspace, &v_res);
+    vec_axpy(app->mspace, 2.0 * app->dx * dt, r->v, -1.0, v_res);
 
     // TODO: w_res
 

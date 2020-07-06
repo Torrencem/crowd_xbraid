@@ -117,6 +117,10 @@ utils_inline int solve_tridiag_system(Vector KL, Vector K, Vector KU,
 }
 
 #ifdef TESTS
+
+// Tests for functions in utils.c. These make sure that little details are
+// implemented correctly!
+
 #include <assert.h>
 #include <math.h>
 
