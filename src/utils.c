@@ -44,12 +44,12 @@ void vec_copy(const int size, const double *a, double *b) {
 
 // i is the row, j is the column
 utils_inline void set_element(Matrix a, const int m, const int n, const int i,
-                        const int j, const double val) {
+                              const int j, const double val) {
     a[i * n + j] = val;
 }
 
-utils_inline double get_element(const Matrix a, const int m, const int n, const int i,
-                        const int j) {
+utils_inline double get_element(const Matrix a, const int m, const int n,
+                                const int i, const int j) {
     return a[i * n + j];
 }
 
@@ -74,7 +74,8 @@ void vec_scale(const int size, const double alpha, Vector x) {
     }
 }
 
-Matrix tridiag_to_matrix(const Vector al, const Vector a, const Vector au, const int n) {
+Matrix tridiag_to_matrix(const Vector al, const Vector a, const Vector au,
+                         const int n) {
     Matrix a_as_mat = zero_matrix(n, n);
     for (int row = 0; row < n; row++) {
         if (row == 0) {
@@ -100,15 +101,17 @@ utils_inline void matmul(const Matrix a, const int m, const int n, Vector *x) {
     *x = y;
 }
 
-// x should be of size x. al, a, and au should be of length n - 1, n, and n - 1 respectively
-utils_inline void matmul_tridiag(const Vector al, const Vector a, const Vector au, const int n, Vector *x) {
+// x should be of size x. al, a, and au should be of length n - 1, n, and n - 1
+// respectively
+utils_inline void matmul_tridiag(const Vector al, const Vector a,
+                                 const Vector au, const int n, Vector *x) {
     Matrix a_as_mat = tridiag_to_matrix(al, a, au, n);
     matmul(a_as_mat, n, n, x);
 }
 
 // Ku = v, solve for u, K is tridiagonal
-utils_inline int solve_tridiag_system(Vector KL, Vector K, Vector KU, const int n,
-                         Vector v) {
+utils_inline int solve_tridiag_system(Vector KL, Vector K, Vector KU,
+                                      const int n, Vector v) {
     int ret = LAPACKE_dgtsv(LAPACK_ROW_MAJOR, n, 1, KL, K, KU, v, 1);
     return ret;
 }

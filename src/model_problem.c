@@ -83,23 +83,16 @@ typedef struct _braid_Vector_struct {
     Vector w;
 } my_Vector;
 
-double left_boundary_solution_u(const double t) {
-    return 0.0;
-}
+double left_boundary_solution_u(const double t) { return 0.0; }
 
-double right_boundary_solution_u(const double t) {
-    return 1.0;
-}
+double right_boundary_solution_u(const double t) { return 1.0; }
 
-double left_boundary_solution_v(const double t) {
-    return 0.0;
-}
+double left_boundary_solution_v(const double t) { return 0.0; }
 
-double right_boundary_solution_v(const double t) {
-    return 0.0;
-}
+double right_boundary_solution_v(const double t) { return 0.0; }
 
-void compute_W_matrix(const my_App *app, const double *w, const int n, Vector *WL, Vector *W, Vector *WU, const double dt) {
+void compute_W_matrix(const my_App *app, const double *w, const int n,
+                      Vector *WL, Vector *W, Vector *WU, const double dt) {
     // Set WL
     *WL = zero_vector(n - 1);
     for (int i = 0; i < n - 1; i++) {
@@ -129,7 +122,9 @@ void compute_W_matrix(const my_App *app, const double *w, const int n, Vector *W
     vec_scale(n - 1, beta, *WU);
 }
 
-void compute_L_matrix(const my_App *app, const double *v, const int n, Vector *LL, Vector *L, Vector *LU, const double dt, const double t) {
+void compute_L_matrix(const my_App *app, const double *v, const int n,
+                      Vector *LL, Vector *L, Vector *LU, const double dt,
+                      const double t) {
     // Set LL
     *LL = zero_vector(n - 1);
     for (int i = 0; i < n - 1; i++) {
@@ -161,36 +156,34 @@ Vector compute_b_vector(const int n, const double *w, const double t) {
     double wright = w[n - 1];
     Vector ret = zero_vector(n);
     ret[0] = vleft * wleft;
-    ret[n - 1] = - vright * wright;
+    ret[n - 1] = -vright * wright;
     return ret;
 }
 
-Vector apply_Phi(const my_App *app, const my_Vector *vec, const double t, const double dt) {
+Vector apply_Phi(const my_App *app, const my_Vector *vec, const double t,
+                 const double dt) {
     Vector u_new = zero_vector(app->npoints);
     double beta = (dt / (2.0 * app->dx));
     // Space Boundary Conditions
     // j = 0
     u_new[0] = vec->u[0] +
-        beta *
-        ((vec->u[0]) * (vec->v[1] - left_boundary_solution_v(t)) +
-         (vec->v[0]) * (vec->u[1] - left_boundary_solution_u(t)));
+               beta * ((vec->u[0]) * (vec->v[1] - left_boundary_solution_v(t)) +
+                       (vec->v[0]) * (vec->u[1] - left_boundary_solution_u(t)));
     // j = app->npoints
     int n = app->npoints - 1;
-    u_new[n] = vec->u[n] +
-        beta *
-        ((vec->u[n]) * (right_boundary_solution_v(t) - vec->v[n - 1]) +
-         (vec->v[n]) * (right_boundary_solution_u(t) - vec->u[n - 1]));
+    u_new[n] =
+        vec->u[n] +
+        beta * ((vec->u[n]) * (right_boundary_solution_v(t) - vec->v[n - 1]) +
+                (vec->v[n]) * (right_boundary_solution_u(t) - vec->u[n - 1]));
     // Non-Boundary points
     for (int j = 1; j < n; j++) {
         double uprev = vec->u[j];
-        u_new[j] = uprev +
-            beta * 
-            ((uprev) * (vec->v[j + 1] - vec->v[j - 1]) +
-             (vec->v[j]) * (vec->u[j + 1] - vec->u[j - 1]));
+        u_new[j] =
+            uprev + beta * ((uprev) * (vec->v[j + 1] - vec->v[j - 1]) +
+                            (vec->v[j]) * (vec->u[j + 1] - vec->u[j - 1]));
     }
     return u_new;
 }
-
 
 /*------------------------------------*/
 
@@ -215,10 +208,10 @@ int my_TriResidual(braid_App app, braid_Vector uleft, braid_Vector uright,
     } else {
         dt = t - tprev;
     }
-    
+
     Vector u_res = apply_Phi(app, uleft, t, dt);
     vec_axpy(app->mspace, 1.0, r->u, -1.0, u_res);
-    
+
     Vector v_res = zero_vector(app->mspace);
     vec_copy(app->mspace, uright->w, v_res);
     Vector LL = NULL;
@@ -226,8 +219,8 @@ int my_TriResidual(braid_App app, braid_Vector uleft, braid_Vector uright,
     Vector LU = NULL;
     compute_L_matrix(app, r->u, app->mspace, &LL, &L, &LU, dt, t);
     multiply_tridiagonal(LL, L, LU, &v_res);
-    vec_axpy(app->mspace, 2.0*dx*dt, r->v, -1.0, v_res);
-    
+    vec_axpy(app->mspace, 2.0 * dx * dt, r->v, -1.0, v_res);
+
     // TODO: w_res
 
     return 0;
@@ -259,7 +252,8 @@ int my_TriSolve(braid_App app, braid_Vector uleft, braid_Vector uright,
     Vector u_new = apply_Phi(app, uleft, t, dt);
 
     // Compute v
-    vec_axpy(app->mspace, -1.0, compute_b_vector(app->mspace, uright->w, t), 1.0, RHS);
+    vec_axpy(app->mspace, -1.0, compute_b_vector(app->mspace, uright->w, t),
+             1.0, RHS);
     Vector LL = NULL;
     Vector L = NULL;
     Vector LU = NULL;
@@ -267,18 +261,18 @@ int my_TriSolve(braid_App app, braid_Vector uleft, braid_Vector uright,
     Vector v_new = zero_vector(app->mspace);
     vec_copy(app->mspace, uright->w, v_new);
     multiply_tridiagonal(LL, L, LU, &v_new);
-    vec_scale(app->mspace, 1.0/(2.0*dx*dt), v_new);
+    vec_scale(app->mspace, 1.0 / (2.0 * dx * dt), v_new);
 
     // Compute w
     Vector w_new = zero_vector(app->mspace);
     vec_copy(app->mspace, uright->w, w_new);
     // Compute I+Lv
     compute_L_matrix(app, v_new, app->mspace, &LL, &L, &LU, dt, t);
-    for (int i = 0; i < app->mspace; i++){
+    for (int i = 0; i < app->mspace; i++) {
         (*L)[i] += 1;
     }
     multiply_tridiagonal(LL, L, LU, &w_new);
-    vec_axpy(app->mspace, -2.0*dx*dt, u_new, 1.0, w_new);
+    vec_axpy(app->mspace, -2.0 * dx * dt, u_new, 1.0, w_new);
 
     vec_copy(app->mspace, u_new, u->u);
     vec_copy(app->mspace, v_new, u->v);
