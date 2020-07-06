@@ -89,12 +89,12 @@ BRAID_DIR = ./xbraid/braid
 BRAID_FLAGS = -I$(BRAID_DIR)
 BRAID_LIB_FILE = $(BRAID_DIR)/libbraid.a
 
-.PHONY: all xbraid crowd clean
+.PHONY: all xbraid model_problem crowd clean
 
 .SUFFIXES:
 .SUFFIXES: .c .o
 
-all: xbraid crowd model_problem
+all: xbraid model_problem
 
 xbraid: ./xbraid/braid/*.c
 	cd xbraid; $(MAKE) braid
