@@ -357,9 +357,6 @@ int my_Clone(braid_App app, braid_Vector u, braid_Vector *v_ptr) {
     /* Allocate the vector */
     v = (my_Vector *)malloc(sizeof(my_Vector));
 
-    u->u = zero_vector(mspace);
-    u->v = zero_vector(mspace);
-    u->w = zero_vector(mspace);
     vec_copy(mspace, (u->u), (v->u));
     vec_copy(mspace, (u->v), (v->v));
     vec_copy(mspace, (u->w), (v->w));
