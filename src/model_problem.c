@@ -88,37 +88,6 @@ double initial_condition_u(const double x) { return 0.25 * x; }
 
 double initial_condition_v(const double x) { return 0.0; }
 
-void compute_W_matrix(const my_App *app, const double *w, const int n,
-                      Vector *WL, Vector *W, Vector *WU, const double dt) {
-    // Set WL
-    *WL = zero_vector(n - 1);
-    for (int i = 0; i < n - 1; i++) {
-        (*WL)[i] = -w[i + 1];
-    }
-
-    // Set W
-    double gamma = app->dx * dt;
-    double beta = dt / (2.0 * app->dx);
-    *W = zero_vector(n);
-    // Middle indices
-    for (int i = 1; i < n - 2; i++) {
-        (*W)[i] = 2 * gamma + beta * w[i - 1] - beta * w[i + 1];
-    }
-    // Edge cases
-    (*W)[0] = beta * -w[1] + 2 * gamma;
-    // Last element of W
-    (*W)[n - 1] = gamma * 2 + beta * w[n - 2];
-
-    // Set WU
-    *WU = zero_vector(n - 1);
-    for (int i = 0; i < n - 1; i++) {
-        (*WL)[i] = w[i];
-    }
-
-    vec_scale(n - 1, beta, *WL);
-    vec_scale(n - 1, beta, *WU);
-}
-
 void compute_L_matrix(const my_App *app, const double *v, const int n,
                       Vector *LL, Vector *L, Vector *LU, const double dt,
                       const double t) {
@@ -132,7 +101,11 @@ void compute_L_matrix(const my_App *app, const double *v, const int n,
     *L = zero_vector(n);
     // Middle indices
     for (int i = 1; i < n - 2; i++) {
+#ifdef MODEL_BACKWARDS
+        (*L)[i] = v[i] - v[i - 1];
+#else
         (*L)[i] = v[i + 1] - v[i - 1];
+#endif
     }
     // Edge cases
     (*L)[0] = v[1] - left_boundary_solution_v(t);
@@ -180,8 +153,7 @@ Vector apply_Phi(const my_App *app, const Vector u, const Vector v,
 #ifdef MODEL_BACKWARDS
     int n = app->mspace - 1;
     u_new[n] =
-        u[n] + beta * ((u[n]) * (v[n] - v[n - 1]) +
-                       (v[n]) * (u[n] - u[n - 1]));
+        u[n] + beta * ((u[n]) * (v[n] - v[n - 1]) + (v[n]) * (u[n] - u[n - 1]));
 #else
     int n = app->mspace - 1;
     u_new[n] =
