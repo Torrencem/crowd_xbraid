@@ -202,8 +202,9 @@ int my_TriResidual(braid_App app, braid_Vector uleft, braid_Vector uright,
         Vector rho = zero_vector(app->mspace);
         Vector w = zero_vector(app->mspace);
         for (int x = 0; x < app->mspace; x++) {
-            rho[x] = initial_condition_rho(x);
-            w[x] = initial_condition_w(x);
+	    double x_space = ((double) x) / ((double) app->mspace);
+            rho[x] = initial_condition_rho(x_space);
+            w[x] = initial_condition_w(x_space);
         }
         rho_res = apply_Phi(app, rho, w, t, dt);
     } else {
@@ -272,8 +273,9 @@ int my_TriSolve(braid_App app, braid_Vector uleft, braid_Vector uright,
         Vector rho = zero_vector(app->mspace);
         Vector w = zero_vector(app->mspace);
         for (int x = 0; x < app->mspace; x++) {
-            rho[x] = initial_condition_w(x);
-            w[x] = initial_condition_rho(x);
+	    double x_space = ((double) x) / ((double) app->mspace);
+            rho[x] = initial_condition_rho(x_space);
+            w[x] = initial_condition_w(x_space);
         }
         rho_new = apply_Phi(app, rho, w, t, dt);
     } else {
@@ -498,7 +500,7 @@ int main(int argc, char *argv[]) {
     ntime = 16;
 
     /* Define some Braid parameters */
-    max_levels = 2;
+    max_levels = 5;
     min_coarse = 1;
     nrelax = 1;
     nrelaxc = 10;
