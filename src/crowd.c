@@ -496,11 +496,11 @@ int main(int argc, char *argv[]) {
 
     /* Define space domain. Space domain is between 0 and 1, mspace defines the
      * number of steps */
-    mspace = 16;
-    ntime = 16;
+    mspace = 8;
+    ntime = 32;
 
     /* Define some Braid parameters */
-    max_levels = 5;
+    max_levels = 2;
     min_coarse = 1;
     nrelax = 1;
     nrelaxc = 10;
@@ -590,6 +590,9 @@ int main(int argc, char *argv[]) {
     app->ntime = ntime;
     app->mspace = mspace;
     app->dx = dx;
+    app->sigma2 = 1.0;
+    app->k_coeff = 1.0;
+    app->k_const = 0.0;
 
     char filename[255];
     sprintf(filename, "%s.%03d", "modelproblem.out.rho", (app->myid));
