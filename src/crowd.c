@@ -293,12 +293,12 @@ int my_TriSolve(braid_App app, braid_Vector uleft, braid_Vector uright,
     
     Vector z_new = zero_vector(app->mspace);
     if (uright != NULL) {
-        vec_copy(app->mspace, uright->w, w_new);
+        vec_copy(app->mspace, uright->z, z_new);
         Vector LL = NULL;
         Vector L = NULL;
         Vector LU = NULL;
         compute_S_matrix(app, rho_new, w_new, app->mspace, &LL, &L, &LU, dt, t);
-        matmul_tridiag(LL, L, LU, app->mspace, &w_new);
+        matmul_tridiag(LL, L, LU, app->mspace, &z_new);
     }
     vec_axpy(app->mspace, -1.0 * dx * dt, rho_new, 1.0, z_new);
 
