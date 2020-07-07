@@ -104,6 +104,7 @@ Matrix tridiag_to_matrix(const Vector al, const Vector a, const Vector au,
 utils_inline void matmul(const Matrix a, const int m, const int n, Vector *x) {
     double *y = calloc(m, sizeof(double));
     cblas_dgemv(CblasRowMajor, CblasNoTrans, m, n, 1.0, a, n, *x, 1, 0.0, y, 1);
+    free(*x);
     *x = y;
 }
 
@@ -113,6 +114,7 @@ utils_inline void matmul_tridiag(const Vector al, const Vector a,
                                  const Vector au, const int n, Vector *x) {
     Matrix a_as_mat = tridiag_to_matrix(al, a, au, n);
     matmul(a_as_mat, n, n, x);
+    free(a_as_mat);
 }
 
 // Ku = v, solve for u, K is tridiagonal
