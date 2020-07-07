@@ -122,7 +122,7 @@ model_problem_backwards: src/model_problem.c $(BRAID_LIB_FILE)
 
 clean:
 	rm -f *.out.*
-	rm -f *.o crowd utils model_problem tests
+	rm -f *.o crowd utils model_problem tests model_problem_backwards
 
 fmt: src/*.c
 	for file in $^ ; do \
