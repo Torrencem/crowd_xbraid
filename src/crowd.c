@@ -76,19 +76,33 @@ typedef struct _braid_Vector_struct {
     Vector z; /* Lagrange multiplier weights */
 } my_Vector;
 
+double initial_condition_rho(const double x) {
+	// \frac{\left(2^{\frac{1}{1\ +\ \left(4x-\frac{4T}{2}\right)^{2}}}\ -\ 1\right)}{1.5}
+	// (2^(1 / (1 + (4x - (4T)/2))) - 1) / 1.5
+	// https://www.desmos.com/calculator/crvh8cl2ta
+	// Endpoint in space. TODO this should be probably #defined
+	double T = 1.0;
+	return (pow(2.0, 1.0 / (1.0 + (4.0 * x - (4.0 * T) / 2.0))) - 1.0) / 1.5;
+}
+
+double initial_condition_w(const double x) {
+	// sqrt(F(p))v, but since v is initially 0, w is initially 0
+	return 0.0;
+}
+
 double get_rho(const my_App *app, const Vector rho, const int n){
 	if(0 <= n && n < app->mspace){
-		return rho[n]
-	}else {
-		return 0 //TODO: Boundary conditions
+		return rho[n];
+	} else {
+		return 0.0; //TODO: Boundary conditions
 	}
 }
 
 double get_w(const my_App *app, const Vector w, const int n){
 	if(0 <= n && n < app->mspace){
-		return w[n]
-	}else {
-		return 0 //TODO: Boundary conditions
+		return w[n];
+	} else {
+		return 0.0; //TODO: Boundary conditions
 	}
 }
 
@@ -96,15 +110,15 @@ double get_w(const my_App *app, const Vector w, const int n){
 Vector apply_Phi(const my_App *app, const Vector rho, const Vector w,
                  const double t, const double dt) {
 
-    double gamma = dt/(2.0*dx);
+    double gamma = dt/(2.0 * app->dx);
     Vector rho_new = zero_vector(app->mspace);
     
     for (int j = 0; j < app->mspace; j++){
-    	rho_new[i] = (app->sigma2 / app->dx) * (get_rho(app, rho, j+1) - 2.0*get_rho(app, rho, j) + get_rho(app, rho, j-1));
-        rho_new[i] -= K(get_rho(app, rho, j)) * (get_w(app, w, j+1) - get_w(app, w, j-1));
-        rho_new[i] += get_w(app, w, j) * (K(get_rho(app, rho, j+1)) - K(get_rho(app, rho, j-1)));
-        rho_new[i] *= gamma;
-        rho_new[i] += get_rho(app, rho, j);
+    	rho_new[j] = (app->sigma2 / app->dx) * (get_rho(app, rho, j+1) - 2.0*get_rho(app, rho, j) + get_rho(app, rho, j-1));
+        rho_new[j] -= K(get_rho(app, rho, j)) * (get_w(app, w, j+1) - get_w(app, w, j-1));
+        rho_new[j] += get_w(app, w, j) * (K(get_rho(app, rho, j+1)) - K(get_rho(app, rho, j-1)));
+        rho_new[j] *= gamma;
+        rho_new[j] += get_rho(app, rho, j);
     }
 
     return rho_new;
@@ -138,7 +152,7 @@ void compute_S_matrix(const my_App *app, const Vector rho, const Vector w, const
                       Vector *LL, Vector *L, Vector *LU, const double dt,
                       const double t) {
 
-    double s2dx = app->sigma2/dx;
+    double s2dx = app->sigma2 / app->dx;
     double coeff = dt/(2.0 * app->dx);
 
     *LL = zero_vector(n - 1);
