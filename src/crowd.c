@@ -97,7 +97,7 @@ double get_rho(const my_App *app, const Vector rho, const Vector w, const int n)
 	if(0 <= n && n < app->mspace){
 		return rho[n];
 	} else if (n == -1) {
-        return rho[0] - (2.0*app->dx/app->sigma2) * (rho[0]/K(rho[0])) * w[0];
+        return rho[0] - (2.0*app->dx/app->sigma2) * (rho[0]/K(rho[0])) * w[0]; // Using G(rho) = rho.
 	} else if (n == app->mspace) {
         return rho[n-1] + (2.0*app->dx/app->sigma2) * (rho[n-1]/K(rho[n-1])) * w[n-1];
     }
