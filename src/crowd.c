@@ -66,7 +66,7 @@ typedef struct _braid_App_struct {
     int ilower;  /* Lower index for my proc */
     int iupper;  /* Upper index for my proc */
     int npoints; /* Number of time points on my proc */
-    FILE *ufile, *vfile, *wfile;
+    FILE *rhofile, *wfile, *zfile;
 } my_App;
 
 /* Define the state vector at one time-step */
@@ -287,9 +287,9 @@ int my_TriSolve(braid_App app, braid_Vector uleft, braid_Vector uright,
     }
     vec_axpy(app->mspace, -1.0 * dx * dt, u_new, 1.0, w_new);
 
-    vec_copy(app->mspace, u_new, u->rho);
-    vec_copy(app->mspace, v_new, u->v);
+    vec_copy(app->mspace, rho_new, u->rho);
     vec_copy(app->mspace, w_new, u->w);
+    vec_copy(app->mspace, z_new, u->z);
 
     /* no refinement */
     braid_TriStatusSetRFactor(status, 1);
@@ -309,13 +309,13 @@ int my_Init(braid_App app, double t, braid_Vector *u_ptr) {
     /* Allocate the vector */
     u = (my_Vector *)malloc(sizeof(my_Vector));
     u->rho = zero_vector(mspace);
-    u->v = zero_vector(mspace);
     u->w = zero_vector(mspace);
+    u->z = zero_vector(mspace);
 
     for (i = 0; i <= mspace - 1; i++) {
         u->rho[i] = ((double)braid_Rand()) / braid_RAND_MAX;
-        u->v[i] = ((double)braid_Rand()) / braid_RAND_MAX;
         u->w[i] = ((double)braid_Rand()) / braid_RAND_MAX;
+        u->z[i] = ((double)braid_Rand()) / braid_RAND_MAX;
     }
 
     *u_ptr = u;
@@ -333,12 +333,12 @@ int my_Clone(braid_App app, braid_Vector u, braid_Vector *v_ptr) {
     v = (my_Vector *)malloc(sizeof(my_Vector));
 
     v->rho = zero_vector(app->mspace);
-    v->v = zero_vector(app->mspace);
     v->w = zero_vector(app->mspace);
+    v->z = zero_vector(app->mspace);
 
     vec_copy(mspace, (u->rho), (v->rho));
-    vec_copy(mspace, (u->v), (v->v));
     vec_copy(mspace, (u->w), (v->w));
+    vec_copy(mspace, (u->z), (v->z));
     *v_ptr = v;
 
     return 0;
@@ -348,8 +348,8 @@ int my_Clone(braid_App app, braid_Vector u, braid_Vector *v_ptr) {
 
 int my_Free(braid_App app, braid_Vector u) {
     free(u->rho);
-    free(u->v);
     free(u->w);
+    free(u->z);
     free(u);
 
     return 0;
@@ -361,8 +361,8 @@ int my_Sum(braid_App app, double alpha, braid_Vector x, double beta,
            braid_Vector y) {
 
     vec_axpy((app->mspace), alpha, (x->rho), beta, (y->rho));
-    vec_axpy((app->mspace), alpha, (x->v), beta, (y->v));
     vec_axpy((app->mspace), alpha, (x->w), beta, (y->w));
+    vec_axpy((app->mspace), alpha, (x->z), beta, (y->z));
     return 0;
 }
 
@@ -374,8 +374,8 @@ int my_SpatialNorm(braid_App app, braid_Vector u, double *norm_ptr) {
     int mspace = (app->mspace);
     for (i = 0; i < mspace; i++) {
         dot += (u->rho)[i] * (u->rho)[i];
-        dot += (u->v)[i] * (u->v)[i];
         dot += (u->w)[i] * (u->w)[i];
+        dot += (u->z)[i] * (u->z)[i];
     }
     *norm_ptr = sqrt(dot);
 
@@ -396,16 +396,16 @@ int my_Access(braid_App app, braid_Vector u, braid_AccessStatus astatus) {
         braid_AccessStatusGetTIndex(astatus, &index);
 
         fprintf((app->rhofile), "%05d: ", index);
-        fprintf((app->vfile), "%05d: ", index);
         fprintf((app->wfile), "%05d: ", index);
+        fprintf((app->zfile), "%05d: ", index);
         for (j = 0; j < (mspace - 1); j++) {
             fprintf((app->rhofile), "% 1.14e, ", (u->rho[j]));
-            fprintf((app->vfile), "% 1.14e, ", (u->v[j]));
             fprintf((app->wfile), "% 1.14e, ", (u->w[j]));
+            fprintf((app->zfile), "% 1.14e, ", (u->z[j]));
         }
         fprintf((app->rhofile), "% 1.14e\n", (u->rho[j]));
-        fprintf((app->vfile), "% 1.14e\n", (u->v[j]));
         fprintf((app->wfile), "% 1.14e\n", (u->w[j]));
+        fprintf((app->zfile), "% 1.14e\n", (u->z[j]));
     }
 
     return 0;
@@ -426,9 +426,9 @@ int my_BufPack(braid_App app, braid_Vector u, void *buffer,
 
     vec_copy((app->mspace), (u->rho), dbuffer);
     dbuffer += (app->mspace);
-    vec_copy((app->mspace), (u->v), dbuffer);
-    dbuffer += (app->mspace);
     vec_copy((app->mspace), (u->w), dbuffer);
+    dbuffer += (app->mspace);
+    vec_copy((app->mspace), (u->z), dbuffer);
     braid_BufferStatusSetSize(bstatus, 3 * (app->mspace) * sizeof(double));
 
     return 0;
@@ -444,15 +444,15 @@ int my_BufUnpack(braid_App app, void *buffer, braid_Vector *u_ptr,
     /* Allocate memory */
     u = (my_Vector *)malloc(sizeof(my_Vector));
     vec_create((app->mspace), &(u->rho));
-    vec_create((app->mspace), &(u->v));
     vec_create((app->mspace), &(u->w));
+    vec_create((app->mspace), &(u->z));
 
     /* Unpack the buffer */
     vec_copy((app->mspace), dbuffer, (u->rho));
     dbuffer += (app->mspace);
-    vec_copy((app->mspace), dbuffer, (u->v));
-    dbuffer += (app->mspace);
     vec_copy((app->mspace), dbuffer, (u->w));
+    dbuffer += (app->mspace);
+    vec_copy((app->mspace), dbuffer, (u->z));
 
     *u_ptr = u;
     return 0;
@@ -575,12 +575,12 @@ int main(int argc, char *argv[]) {
     app->dx = dx;
 
     char filename[255];
-    sprintf(filename, "%s.%03d", "modelproblem.out.u", (app->myid));
+    sprintf(filename, "%s.%03d", "modelproblem.out.rho", (app->myid));
     (app->rhofile) = fopen(filename, "w");
-    sprintf(filename, "%s.%03d", "modelproblem.out.v", (app->myid));
-    (app->vfile) = fopen(filename, "w");
     sprintf(filename, "%s.%03d", "modelproblem.out.w", (app->myid));
     (app->wfile) = fopen(filename, "w");
+    sprintf(filename, "%s.%03d", "modelproblem.out.z", (app->myid));
+    (app->zfile) = fopen(filename, "w");
 
     /* Initialize XBraid */
     braid_InitTriMGRIT(MPI_COMM_WORLD, MPI_COMM_WORLD, dt, tstop, ntime - 1,
@@ -610,50 +610,6 @@ int main(int argc, char *argv[]) {
     /* Print runtime to file (for runtime comparisons)*/
     time = (double)(end - start) / CLOCKS_PER_SEC;
     printf("Total Run Time: %f s \n", time);
-
-    //   {
-    //      char    filename[255];
-    //      FILE   *file;
-    //
-    //      //Note that this out file appends the number of time steps
-    //      sprintf(filename, "%s.%d", "trischur-adv-diff.time", ntime);
-    //
-    //      file = fopen(filename, "w");
-    //      fprintf(file, "%f", time);
-    //      fflush(file);
-    //      fclose(file);
-    //   }
-
-    //   /* RDF Testing */
-    //   {
-    //      double     cscale = (1/(dx*dt))*(2 + dt*dt/alpha);
-    //      double     lscale = (1/(dx*dt))*(1 + dt*dt/alpha);
-    //      my_Vector *e = (my_Vector *) malloc(sizeof(my_Vector));
-    //      my_Vector *z = (my_Vector *) malloc(sizeof(my_Vector));
-    //
-    //      (e->values) = (double*) malloc( mspace*sizeof(double) );
-    //      (z->values) = (double*) malloc( mspace*sizeof(double) );
-    //      for(i = 0; i < mspace; i++)
-    //      {
-    //         (e->values[i]) = 1.0;
-    //         (z->values[i]) = 0.0;
-    //      }
-    //      apply_TriResidual(app, z, z, NULL, e, 1, dt);
-    //
-    //      for(i = 0; i < mspace; i++)
-    //      {
-    //         (e->values[i]) = 1.0;
-    //         (z->values[i]) = 0.0;
-    //      }
-    //      apply_TriResidual(app, NULL, z, NULL, e, 1, dt);
-    //
-    //      for(i = 0; i < mspace; i++)
-    //      {
-    //         (e->values[i]) = 1.0;
-    //         (z->values[i]) = 0.0;
-    //      }
-    //      apply_TriResidual(app, z, NULL, NULL, e, 1, dt);
-    //   }
 
     free(app);
 
