@@ -213,25 +213,26 @@ int my_TriResidual(braid_App app, braid_Vector uleft, braid_Vector uright,
 
     Vector w_res = zero_vector(app->mspace);
     if (uright != NULL) {
-        vec_copy(app->mspace, uright->w, v_res);
-        Vector LL = NULL;
-        Vector L = NULL;
-        Vector LU = NULL;
-        compute_R_matrix(app, r->rho, app->mspace, &LL, &L, &LU, dt, t);
-        matmul_tridiag(LL, L, LU, app->mspace, &v_res);
-    }
-    vec_axpy(app->mspace, app->dx * dt, r->w, -1.0, v_res);
-
-    Vector z_res = zero_vector(app->mspace);
-    if (uright != NULL) {
         vec_copy(app->mspace, uright->w, w_res);
         Vector LL = NULL;
         Vector L = NULL;
         Vector LU = NULL;
-        compute_S_matrix(app, r->rho, r->w, app->mspace, &LL, &L, &LU, dt, t);
+        compute_R_matrix(app, r->rho, app->mspace, &LL, &L, &LU, dt, t);
         matmul_tridiag(LL, L, LU, app->mspace, &w_res);
     }
-    vec_axpy(app->mspace, -1.0 * app->dx * dt, r->rho, 1.0, w_res);
+    vec_axpy(app->mspace, app->dx * dt, r->w, -1.0, w_res);
+
+    Vector z_res = zero_vector(app->mspace);
+    if (uright != NULL) {
+        vec_copy(app->mspace, uright->z, z_res);
+        Vector LL = NULL;
+        Vector L = NULL;
+        Vector LU = NULL;
+        // Note the r->w ! Double check this TODO
+        compute_S_matrix(app, r->rho, r->w, app->mspace, &LL, &L, &LU, dt, t);
+        matmul_tridiag(LL, L, LU, app->mspace, &z_res);
+    }
+    vec_axpy(app->mspace, -1.0 * app->dx * dt, r->rho, 1.0, z_res);
 
     if (f != NULL){
         vec_axpy(app->mspace, -1.0, f->rho, 1.0, rho_res);
@@ -274,7 +275,7 @@ int my_TriSolve(braid_App app, braid_Vector uleft, braid_Vector uright,
             rho[x] = initial_condition_w(x);
             w[x] = initial_condition_rho(x);
         }
-        u_new = apply_Phi(app, rho, w, t, dt);
+        rho_new = apply_Phi(app, rho, w, t, dt);
     } else {
         rho_new = apply_Phi(app, uleft->rho, uleft->w, t, dt);
     }
@@ -299,7 +300,7 @@ int my_TriSolve(braid_App app, braid_Vector uleft, braid_Vector uright,
         compute_S_matrix(app, rho_new, w_new, app->mspace, &LL, &L, &LU, dt, t);
         matmul_tridiag(LL, L, LU, app->mspace, &w_new);
     }
-    vec_axpy(app->mspace, -1.0 * dx * dt, u_new, 1.0, w_new);
+    vec_axpy(app->mspace, -1.0 * dx * dt, rho_new, 1.0, z_new);
 
     vec_copy(app->mspace, rho_new, u->rho);
     vec_copy(app->mspace, w_new, u->w);
