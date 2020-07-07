@@ -20,13 +20,13 @@
  ***********************************************************************EHEADER*/
 
 /**
- * Example:       model_problem.c
+ * Example:       crowd.c
  *
  * Interface:     C
  *
  * Requires:      Lapacke
  *
- * Compile with:  make model_problem
+ * Compile with:  make crowd
  *
  * Description:   Solves a crowd control problem in time-parallel:
  *
@@ -47,6 +47,8 @@
 
 #include "lapacke.h"
 #include "utils.c"
+
+#define K(r) (app->k_coeff * r + app->k_const)
 
 /*--------------------------------------------------------------------------
  * My App and Vector structures
@@ -90,23 +92,29 @@ double initial_condition_w(const double x) {
 	return 0.0;
 }
 
-double get_rho(const my_App *app, const Vector rho, const int n){
+
+double get_rho(const my_App *app, const Vector rho, const Vector w, const int n){
 	if(0 <= n && n < app->mspace){
 		return rho[n];
-	} else {
-		return 0.0; //TODO: Boundary conditions
-	}
+	} else if (n == -1) {
+        return rho[0] - (2.0*app->dx/app->sigma2) * (rho[0]/K(rho[0])) * w[0];
+	} else if (n == app->mspace) {
+        return rho[n-1] + (2.0*app->dx/app->sigma2) * (rho[n-1]/K(rho[n-1])) * w[n-1];
+    }
+    return 0.0;
 }
 
-double get_w(const my_App *app, const Vector w, const int n){
+double get_w(const my_App *app, const Vector rho, const Vector w, const int n){
 	if(0 <= n && n < app->mspace){
 		return w[n];
-	} else {
-		return 0.0; //TODO: Boundary conditions
-	}
+	} else if (n == -1){
+	    return (app->sigma2 / (2.0 * app->dx)) * (K(get_rho(app, rho, w, n))/get_rho(app, rho, w, n)) * (rho[0] - get_rho(app, rho, w, n));
+    } else if (n == app->mspace) {
+	    return (app->sigma2 / (2.0 * app->dx)) * (K(get_rho(app, rho, w, n))/get_rho(app, rho, w, n)) * (get_rho(app, rho, w, n) - rho[n-1]);
+    }
+    return 0.0;
 }
 
-#define K(r) (app->k_coeff * r + app->k_const)
 Vector apply_Phi(const my_App *app, const Vector rho, const Vector w,
                  const double t, const double dt) {
 
@@ -114,18 +122,18 @@ Vector apply_Phi(const my_App *app, const Vector rho, const Vector w,
     Vector rho_new = zero_vector(app->mspace);
     
     for (int j = 0; j < app->mspace; j++){
-    	rho_new[j] = (app->sigma2 / app->dx) * (get_rho(app, rho, j+1) - 2.0*get_rho(app, rho, j) + get_rho(app, rho, j-1));
-        rho_new[j] -= K(get_rho(app, rho, j)) * (get_w(app, w, j+1) - get_w(app, w, j-1));
-        rho_new[j] += get_w(app, w, j) * (K(get_rho(app, rho, j+1)) - K(get_rho(app, rho, j-1)));
+    	rho_new[j] = (app->sigma2 / app->dx) * (get_rho(app, rho, w, j+1) - 2.0*get_rho(app, rho, w, j) + get_rho(app, rho, w, j-1));
+        rho_new[j] -= K(get_rho(app, rho, w, j)) * (get_w(app, rho, w, j+1) - get_w(app, rho, w, j-1));
+        rho_new[j] += get_w(app, rho, w, j) * (K(get_rho(app, rho, w, j+1)) - K(get_rho(app, rho, w, j-1)));
         rho_new[j] *= gamma;
-        rho_new[j] += get_rho(app, rho, j);
+        rho_new[j] += get_rho(app, rho, w, j);
     }
 
     return rho_new;
 }
 
 
-void compute_R_matrix(const my_App *app, const Vector rho, const int n,
+void compute_R_matrix(const my_App *app, const Vector rho, const Vector w, const int n,
                       Vector *LL, Vector *L, Vector *LU, const double dt,
                       const double t) {
 
@@ -133,17 +141,17 @@ void compute_R_matrix(const my_App *app, const Vector rho, const int n,
 
     *LL = zero_vector(n - 1);
     for (int i = 0; i < n - 1; i++) {
-        (*LL)[i] = coeff * K(get_rho(app, rho, i+1));
+        (*LL)[i] = coeff * K(get_rho(app, rho, w, i+1));
     }
 
     *L = zero_vector(n);
     for (int i = 0; i < n; i++) {
-        (*L)[i] = coeff * (K(get_rho(app, rho, i+1)) - K(get_rho(app, rho, i-1)));
+        (*L)[i] = coeff * (K(get_rho(app, rho, w, i+1)) - K(get_rho(app, rho, w, i-1)));
     }
 
     *LU = zero_vector(n - 1);
     for (int i = 0; i < n - 1; i++) {
-        (*LU)[i] = coeff * K(get_rho(app, rho, i));
+        (*LU)[i] = coeff * K(get_rho(app, rho, w, i));
     }
 }
 
@@ -157,17 +165,17 @@ void compute_S_matrix(const my_App *app, const Vector rho, const Vector w, const
 
     *LL = zero_vector(n - 1);
     for (int i = 0; i < n - 1; i++) {
-        (*LL)[i] = coeff * (s2dx + K(get_rho(app, rho, i)) * w[i+1]);
+        (*LL)[i] = coeff * (s2dx + K(get_rho(app, rho, w, i)) * w[i+1]);
     }
 
     *L = zero_vector(n);
     for (int i = 0; i < n; i++) {
-        (*L)[i] = 1.0 + coeff * (-2.0 * s2dx + K(get_rho(app, rho, i)) * (get_w(app, w, i+1) - get_w(app, w, i-1)));
+        (*L)[i] = 1.0 + coeff * (-2.0 * s2dx + K(get_rho(app, rho, w, i)) * (get_w(app, rho, w, i+1) - get_w(app, rho, w, i-1)));
     }
 
     *LU = zero_vector(n - 1);
     for (int i = 0; i < n - 1; i++) {
-        (*LU)[i] = coeff * (s2dx - K(get_rho(app, rho, i+1)) * w[i]);
+        (*LU)[i] = coeff * (s2dx - K(get_rho(app, rho, w, i+1)) * w[i]);
     }
 }
 
@@ -220,7 +228,7 @@ int my_TriResidual(braid_App app, braid_Vector uleft, braid_Vector uright,
         Vector LL = NULL;
         Vector L = NULL;
         Vector LU = NULL;
-        compute_R_matrix(app, r->rho, app->mspace, &LL, &L, &LU, dt, t);
+        compute_R_matrix(app, r->rho, r->w, app->mspace, &LL, &L, &LU, dt, t);
         matmul_tridiag(LL, L, LU, app->mspace, &w_res);
 	free(LL);
 	free(L);
@@ -300,7 +308,7 @@ int my_TriSolve(braid_App app, braid_Vector uleft, braid_Vector uright,
         Vector LL = NULL;
         Vector L = NULL;
         Vector LU = NULL;
-        compute_R_matrix(app, rho_new, app->mspace, &LL, &L, &LU, dt, t);
+        compute_R_matrix(app, rho_new, u->w, app->mspace, &LL, &L, &LU, dt, t);
         matmul_tridiag(LL, L, LU, app->mspace, &w_new);
         vec_scale(app->mspace, 1.0 / (dx * dt), w_new);
 	free(LL);
