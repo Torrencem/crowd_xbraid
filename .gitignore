@@ -6,3 +6,4 @@ model_problem_backwards
 libgfortran.a
 tests
 **/*.dSYM/*
+compile_flags.txt
