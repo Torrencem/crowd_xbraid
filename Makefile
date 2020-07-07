@@ -99,9 +99,9 @@ all: xbraid model_problem
 xbraid: ./xbraid/braid/*.c
 	cd xbraid; $(MAKE) braid
 
-crowd: src/main.c $(BRAID_LIB_FILE)
+crowd: src/crowd.c $(BRAID_LIB_FILE)
 	@echo "Building" $@ "..."
-	$(MPICC) $(CFLAGS) -L. -llapacke -llapack -lopenblas -lgfortran $(BRAID_FLAGS) -o crowd src/main.c $(BRAID_LIB_FILE) $(LFLAGS) $(EXTRAFLAGS)
+	$(MPICC) $(CFLAGS) -L. -llapacke -llapack -lopenblas -lgfortran $(BRAID_FLAGS) -o crowd src/crowd.c $(BRAID_LIB_FILE) $(LFLAGS) $(EXTRAFLAGS)
 
 utils: src/utils.c $(BRAID_LIB_FILE)
 	@echo "Building" $@ "..."
