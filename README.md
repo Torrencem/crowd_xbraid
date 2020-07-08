@@ -1,7 +1,7 @@
 
 This is the home REPO for the projects for RIPS 2020 (LLNL team). To get this code running:
 
-    git clone https://Torrencem/crowd_xbraid.git --recursive
+    git clone https://github.com/Torrencem/crowd_xbraid.git --recursive
     
 on Linux:
 
