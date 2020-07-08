@@ -12,3 +12,4 @@
 /usr/lib/x86_64-linux-gnu/liblapack.a
 -I../openmpi-4.0.4/ompi/include
 ../openmpi-4.0.4/ompi/libmpi.la
+-D TESTS

@@ -13,11 +13,11 @@ ifeq ($(shell uname -s), Darwin)
    EXTRAFLAGS = 
    ifeq ($(optlevel),DEBUG)
       CFLAGS = -g -Wall -L/usr/local/opt/openblas/lib -I/usr/local/opt/openblas/include -L/usr/local/opt/lapack/lib -I/usr/local/opt/lapack/insude -D NOINLINE
-      CXXFLAGS = -g -Wall
+      CXXFLAGS = -g -Wall -L/usr/local/opt/openblas/lib -I/usr/local/opt/openblas/include -L/usr/local/opt/lapack/lib -I/usr/local/opt/lapack/insude -D NOINLINE
       FORTFLAGS = -Og -Wall
    else
       CFLAGS = -O -Wall -L/usr/local/opt/openblas/lib -I/usr/local/opt/openblas/include -L/usr/local/opt/lapack/lib -I/usr/local/opt/lapack/insude
-      CXXFLAGS = -O -Wall
+      CXXFLAGS = -O -Wall -L/usr/local/opt/openblas/lib -I/usr/local/opt/openblas/include -L/usr/local/opt/lapack/lib -I/usr/local/opt/lapack/insude
       FORTFLAGS = -O1 -Wall
    endif
 else ifeq ($(findstring cab,$(HOSTNAME)),cab)
@@ -29,7 +29,7 @@ else ifeq ($(findstring cab,$(HOSTNAME)),cab)
    EXTRAFLAGS = 
    ifeq ($(optlevel),DEBUG)
       CFLAGS = -g -Wall -D NOINLINE
-      CXXFLAGS = -g -Wall
+      CXXFLAGS = -g -Wall -D NOINLINE
       FORTFLAGS = -Og -Wall
    else
       CFLAGS = -O -Wall
@@ -45,7 +45,7 @@ else ifeq ($(findstring vulcan,$(HOSTNAME)),vulcan)
    EXTRAFLAGS = 
    ifeq ($(optlevel),DEBUG)
       CFLAGS = -g -Wall -D NOINLINE
-      CXXFLAGS = -g -Wall
+      CXXFLAGS = -g -Wall -D NOINLINE
       FORTFLAGS = -Og -Wall
    else
       CFLAGS = -O -Wall
@@ -60,7 +60,7 @@ else ifeq ($(shell uname -s),Linux)
    EXTRAFLAGS = /usr/lib/x86_64-linux-gnu/liblapacke.a /usr/lib/x86_64-linux-gnu/liblapack.a
    ifeq ($(optlevel),DEBUG)
       CFLAGS = -g -Wall -D NOINLINE
-      CXXFLAGS = -g -Wall
+      CXXFLAGS = -g -Wall -D NOINLINE
       FORTFLAGS = -g -Wall
    else
       CFLAGS = -O -Wall
@@ -75,7 +75,7 @@ else
    EXTRAFLAGS = 
    ifeq ($(optlevel),DEBUG)
       CFLAGS = -g -Wall -D NOINLINE
-      CXXFLAGS = -g -Wall
+      CXXFLAGS = -g -Wall -D NOINLINE
       FORTFLAGS = -g -Wall
    else
       CFLAGS = -O -Wall
@@ -110,6 +110,11 @@ utils: src/utils.c $(BRAID_LIB_FILE)
 test: src/utils.c $(BRAID_LIB_FILE)
 	@echo "Running tests in utils.c..."
 	$(MPICC) -D TESTS -D NOINLINE $(CFLAGS) -Wextra -L. -llapacke -llapack -lopenblas -lgfortran $(BRAID_FLAGS) -o tests src/utils.c $(BRAID_LIB_FILE) $(LFLAGS) $(EXTRAFLAGS) -g -O0
+	./tests
+
+testxx: src/utils.cpp $(BRAID_LIB_FILE)
+	@echo "Running tests in utils.cpp..."
+	$(MPICXX) -D TESTS -D NOINLINE $(CXXFLAGS) -Wextra -L. -llapacke -llapack -lopenblas -lgfortran $(BRAID_FLAGS) -o tests src/utils.cpp $(BRAID_LIB_FILE) $(LFLAGS) $(EXTRAFLAGS) -g -O0
 	./tests
 
 model_problem: src/model_problem.c $(BRAID_LIB_FILE)
