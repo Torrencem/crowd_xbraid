@@ -117,6 +117,10 @@ testxx: src/utils.cpp $(BRAID_LIB_FILE)
 	$(MPICXX) -D TESTS -D NOINLINE $(CXXFLAGS) -Wextra -L. -llapacke -llapack -lopenblas -lgfortran $(BRAID_FLAGS) -o tests src/utils.cpp $(BRAID_LIB_FILE) $(LFLAGS) $(EXTRAFLAGS) -g -O0
 	./tests
 
+burger: src/burger.cpp $(BRAID_LIB_FILE)
+	@echo "Building" $@ "..."
+	$(MPICXX) $(CXXFLAGS) -Wextra -L. -llapacke -llapack -lopenblas -lgfortran $(BRAID_FLAGS) -o burger src/burger.cpp $(BRAID_LIB_FILE) $(LFLAGS) $(EXTRAFLAGS)
+
 model_problem: src/model_problem.c $(BRAID_LIB_FILE)
 	@echo "Building" $@ "..."
 	$(MPICC) $(CFLAGS) -L. -llapacke -llapack -lopenblas -lgfortran $(BRAID_FLAGS) -o model_problem src/model_problem.c $(BRAID_LIB_FILE) $(LFLAGS) $(EXTRAFLAGS)

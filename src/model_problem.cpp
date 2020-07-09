@@ -42,7 +42,7 @@
 #include <string.h>
 #include <time.h>
 
-#include "braid.h"
+#include "braid.hpp"
 #include "braid_test.h"
 #define PI 3.14159265
 #define g(dt, dx) dt / (2 * dx)
@@ -50,7 +50,7 @@
 #define b(dt, dx, nu) nu *dt / (dx * dx)
 
 #include "lapacke.h"
-#include "utils.c"
+#include "utils.cpp"
 
 /*--------------------------------------------------------------------------
  * My App and Vector structures
@@ -69,12 +69,15 @@ typedef struct _braid_App_struct {
     FILE *ufile, *vfile, *wfile;
 } my_App;
 
-/* Define the state vector at one time-step */
-typedef struct _braid_Vector_struct {
-    Vector u;
-    Vector v;
-    Vector w;
-} my_Vector;
+class BraidVector
+{
+    public:
+    Vector u, v, w;
+
+    BraidVector(Vector u_, Vector v_, Vector w_) : u(u_), v(v_), w(w_) { }
+
+    virtual ~BraidVector() { };
+};
 
 double left_boundary_solution_u(const double t) { return 0.0; }
 
@@ -87,6 +90,34 @@ double right_boundary_solution_v(const double t) { return 0.0; }
 double initial_condition_u(const double x) { return 0.25 * x; }
 
 double initial_condition_v(const double x) { return 0.0; }
+
+class MyBraidApp : public BraidApp {
+protected:
+    // BraidApp defines tstart, tstop, ntime and comm_t
+public:
+    // Main constructor
+    MyBraidApp(MPI_Comm comm_t__, int rank_, double tstart_ = 0.0, double tstop_ = 1.0, int ntime_ = 100);
+
+    virtual ~MyBraidApp() {};
+
+    // Define the Vraid Wrapper routines
+    // Note: braid_Vector is the type BraidVector*
+    virtual int Clone(braid_Vector u_,
+                      braid_Vector *v_ptr);
+
+    virtual int Init(double t,
+                     braid_Vector *v_ptr);
+
+    virtual int Free(braid_Vector u_);
+
+    virtual int Sum(double alpha,
+                    braid_Vector x_,
+                    double beta,
+                    braid_Vector y_);
+
+    virtual int SpatialNorm(braid_Vector u_,
+                            double *norm_ptr);
+}
 
 void compute_L_matrix(const my_App *app, const double *v, const int n,
                       Vector *LL, Vector *L, Vector *LU, const double dt,

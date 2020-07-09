@@ -5,5 +5,6 @@ model_problem
 model_problem_backwards
 libgfortran.a
 tests
+burger
 **/*.dSYM/*
 compile_flags.txt
