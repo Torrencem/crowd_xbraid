@@ -28,13 +28,13 @@ double E_deriv(double m) {
     return 1.0;
 }
 
-// double initial_density(double x) {
-//     return 0.95 * exp(-20.0 * x * x);
-// }
-
 double initial_density(double x) {
-    return 0.03;
+    return 0.95 * exp(-20.0 * x * x);
 }
+
+// double initial_density(double x) {
+//     return 0.03;
+// }
 
 double I_T(std::vector<Vector> ms, std::vector<Vector> vs, double dt, double dx) {
     double result = 0.0;
@@ -59,7 +59,7 @@ int main(int argc, char **argv) {
     double dx = 2.0 / ((double) mspace);
     double dt = T / ((double) ntime);
 
-    double k = 0.001;
+    double k = 0.01;
 
     double e1 = 0.0001;
 
@@ -70,7 +70,7 @@ int main(int argc, char **argv) {
 
     // Set initial density
     for (int x = 0; x < mspace; x++) {
-        ms[0][x] = initial_density(x / mspace);
+        ms[0][x] = initial_density(((double) x) / (double) mspace);
     }
 
     std::vector<Vector> us;
@@ -85,11 +85,7 @@ int main(int argc, char **argv) {
     
     for (int time = 0; time < ntime; time++) {
         for (int x = 0; x < mspace; x++) {
-            // us[time][x] = 0.5;
-            // vs[time][x] = 0.5;
-            if (time != 0) {
-                ms[time][x] = 0.5;
-            }
+            ms[time][x] = initial_density(((double) x) / (double) mspace);
         }
     }
 

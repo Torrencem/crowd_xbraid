@@ -94,7 +94,7 @@ BRAID_LIB_FILE = $(BRAID_DIR)/libbraid.a
 .SUFFIXES:
 .SUFFIXES: .c .o
 
-all: xbraid crowd model_problem burger
+all: xbraid crowd model_problem model_problem_upwind burger
 
 xbraid: ./xbraid/braid/*.c
 	cd xbraid; $(MAKE) braid
