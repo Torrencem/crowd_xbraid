@@ -133,6 +133,10 @@ model_problem_upwind: src/model_problem_upwind.c $(BRAID_LIB_FILE)
 	@echo "Building" $@ "..."
 	$(MPICC) $(CFLAGS) -L. -llapacke -llapack -lopenblas -lgfortran $(BRAID_FLAGS) -o model_problem_upwind src/model_problem_upwind.c $(BRAID_LIB_FILE) $(LFLAGS) $(EXTRAFLAGS)
 
+model_problem_pp: src/model_problem.cpp $(BRAID_LIB_FILE)
+	@echo "Building" $@ "..."
+	$(MPICXX) $(CXXFLAGS) -L. -llapacke -llapack -lopenblas -lgfortran $(BRAID_FLAGS) -o model_problem_pp src/model_problem.cpp $(BRAID_LIB_FILE) $(LFLAGS) $(EXTRAFLAGS)
+
 clean:
 	rm -f *.out.*
 	rm -f *.o crowd utils model_problem tests model_problem_backwards model_problem_upwind burger

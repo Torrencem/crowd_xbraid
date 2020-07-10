@@ -1,4 +1,4 @@
 [submodule "xbraid"]
 	path = xbraid
-    url = https://github.com/XBraid/xbraid.git
-    branch = trimgrit
+	url = git@github.com:Torrencem/xbraid.git
+	branch = trimgrit_cxx

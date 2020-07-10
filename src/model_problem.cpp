@@ -42,7 +42,7 @@
 #include <string.h>
 #include <time.h>
 
-#include "braid.hpp"
+#include "tribraid.hpp"
 #include "braid_test.h"
 #define PI 3.14159265
 #define g(dt, dx) dt / (2 * dx)
@@ -55,19 +55,6 @@
 /*--------------------------------------------------------------------------
  * My App and Vector structures
  *--------------------------------------------------------------------------*/
-
-typedef struct _braid_App_struct {
-    int myid;   /* Rank of the processor */
-    int ntime;  /* Total number of time-steps (starting at time 0) */
-    int mspace; /* Number of space points included in our state vector */
-                /* So including boundaries we have M+2 space points */
-    double dx;  /* Spatial mesh spacing */
-
-    int ilower;  /* Lower index for my proc */
-    int iupper;  /* Upper index for my proc */
-    int npoints; /* Number of time points on my proc */
-    FILE *ufile, *vfile, *wfile;
-} my_App;
 
 class BraidVector
 {
@@ -91,10 +78,14 @@ double initial_condition_u(const double x) { return 0.25 * x; }
 
 double initial_condition_v(const double x) { return 0.0; }
 
-class MyBraidApp : public BraidApp {
+class MyBraidApp : public TriBraidApp {
 protected:
     // BraidApp defines tstart, tstop, ntime and comm_t
 public:
+    int ntime, mspace, ilower, iupper, npoints, myid;
+    double dx;
+    FILE *ufile, *vfile, *wfile;
+
     // Main constructor
     MyBraidApp(MPI_Comm comm_t__, int rank_, double tstart_ = 0.0, double tstop_ = 1.0, int ntime_ = 100);
 
@@ -103,91 +94,132 @@ public:
     // Define the Vraid Wrapper routines
     // Note: braid_Vector is the type BraidVector*
     virtual int Clone(braid_Vector u_,
-                      braid_Vector *v_ptr);
+                      braid_Vector *v_ptr) override;
 
     virtual int Init(double t,
-                     braid_Vector *v_ptr);
+                     braid_Vector *v_ptr) override;
 
-    virtual int Free(braid_Vector u_);
+    virtual int Free(braid_Vector u_) override;
 
     virtual int Sum(double alpha,
                     braid_Vector x_,
                     double beta,
-                    braid_Vector y_);
+                    braid_Vector y_) override;
 
     virtual int SpatialNorm(braid_Vector u_,
-                            double *norm_ptr);
+                            double *norm_ptr) override;
+
+    virtual int Access(braid_Vector       u_,
+                            BraidAccessStatus &astatus) override;
+
+    virtual int TriResidual(braid_Vector uleft_,
+                            braid_Vector uright_,
+                            braid_Vector f_,
+                            braid_Vector r_,
+                            BraidTriStatus &pstatus) override;
+
+    virtual int TriSolve(braid_Vector uleft_,
+                         braid_Vector uright_,
+                         braid_Vector fleft_,
+                         braid_Vector fright_,
+                         braid_Vector f_,
+                         braid_Vector u_,
+                         BraidTriStatus &pstatus) override;
+
+    virtual int BufSize(braid_Int         *size_ptr,
+                             BraidBufferStatus &bstatus) override;
+
+    virtual int BufPack(braid_Vector       u_,
+                             void              *buffer,
+                             BraidBufferStatus &bstatus) override;
+
+    virtual int BufUnpack(void              *buffer,
+                               braid_Vector      *u_ptr,
+                               BraidBufferStatus &bstatus) override;
+
+    // Not needed
+    virtual int Residual(braid_Vector u_,
+                            braid_Vector r_,
+                            BraidStepStatus &pstatus) override { return 0; }
+
+    const Tridiag_Matrix compute_L_matrix(Vector &V, const double dt, const double t);
+
+    const Vector apply_Phi(Vector &u, Vector &v,
+                 const double t, const double dt);
+};
+
+MyBraidApp::MyBraidApp(MPI_Comm comm_t_, int rank_, double tstart_, double tstop_, int ntime_) : TriBraidApp(comm_t_, tstart_, tstop_, ntime_) {
+
 }
 
-void compute_L_matrix(const my_App *app, const double *v, const int n,
-                      Vector *LL, Vector *L, Vector *LU, const double dt,
-                      const double t) {
-    // Set LL
-    *LL = zero_vector(n - 1);
+const Tridiag_Matrix MyBraidApp::compute_L_matrix(Vector &v, const double dt, const double t) {
+    int n = v->len;
+    Tridiag_Matrix L = new Tridiag_Matrix_(n);
     for (int i = 0; i < n - 1; i++) {
-        (*LL)[i] = v[i];
+        L->al[i] = (*v)[i];
     }
 
-    // Set L
-    *L = zero_vector(n);
-    // Middle indices
     for (int i = 1; i < n - 2; i++) {
 #ifdef MODEL_BACKWARDS
-        (*L)[i] = v[i] - v[i - 1];
+        L->a[i] = (*v)[i] - (*v)[i - 1];
 #else
-        (*L)[i] = v[i + 1] - v[i - 1];
+        L->a[i] = (*v)[i + 1] - (*v)[i - 1];
 #endif
     }
-    // Edge cases
-    (*L)[0] = v[1] - left_boundary_solution_v(t);
-    // Last element of L
-    (*L)[n - 1] = right_boundary_solution_v(t) - v[n - 2];
 
-    // Set LU
-    *LU = zero_vector(n - 1);
+    L->a[0] = (*v)[1] - left_boundary_solution_v(t);
+
+    L->a[n - 1] = right_boundary_solution_v(t) - (*v)[n - 2];
+
     for (int i = 0; i < n - 1; i++) {
-        (*LL)[i] = -v[i];
+        L->al[i] = -(*v)[i];
     }
+
+    return L;
 }
 
-Vector compute_b_vector(const int n, const double *w, const double t) {
+Vector compute_b_vector(Vector &w, const double t) {
+    int n = w->len;
     double vleft = left_boundary_solution_v(t);
     double vright = right_boundary_solution_v(t);
-    double wleft = w[0];
-    double wright = w[n - 1];
-    Vector ret = zero_vector(n);
+    double wleft = (*w)[0];
+    double wright = (*w)[n - 1];
+    Vector ret = new Vector_(n);
     ret[0] = vleft * wleft;
     ret[n - 1] = -vright * wright;
     return ret;
 }
 
-Vector apply_Phi(const my_App *app, const Vector u, const Vector v,
+const Vector MyBraidApp::apply_Phi(Vector &u_, Vector &v_,
                  const double t, const double dt) {
-    Vector u_new = zero_vector(app->mspace);
+    Vector u_new = new Vector_(mspace);
 #ifdef MODEL_BACKWARDS
-    double beta = (dt / (app->dx));
+    double beta = (dt / dx);
 #else
-    double beta = (dt / (2.0 * app->dx));
+    double beta = (dt / (2.0 * dx));
 #endif
+
+    Vector_ &u = *u_;
+    Vector_ &v = *v_;
 
     // Space Boundary Conditions
     // j = 0
 #ifdef MODEL_BACKWARDS
-    u_new[0] = u[0] + beta * ((u[0]) * (v[0] - left_boundary_solution_v(t)) +
+    (*u_new)[0] = u[0] + beta * ((u[0]) * (v[0] - left_boundary_solution_v(t)) +
                               (v[0]) * (u[0] - left_boundary_solution_u(t)));
 #else
-    u_new[0] = u[0] + beta * ((u[0]) * (v[1] - left_boundary_solution_v(t)) +
+    (*u_new)[0] = u[0] + beta * ((u[0]) * (v[1] - left_boundary_solution_v(t)) +
                               (v[0]) * (u[1] - left_boundary_solution_u(t)));
 #endif
 
     // j = app->mspace
 #ifdef MODEL_BACKWARDS
-    int n = app->mspace - 1;
-    u_new[n] =
+    int n = mspace - 1;
+    (*u_new)[n] =
         u[n] + beta * ((u[n]) * (v[n] - v[n - 1]) + (v[n]) * (u[n] - u[n - 1]));
 #else
-    int n = app->mspace - 1;
-    u_new[n] =
+    int n = mspace - 1;
+    (*u_new)[n] =
         u[n] + beta * ((u[n]) * (right_boundary_solution_v(t) - v[n - 1]) +
                        (v[n]) * (right_boundary_solution_u(t) - u[n - 1]));
 #endif
@@ -196,10 +228,10 @@ Vector apply_Phi(const my_App *app, const Vector u, const Vector v,
     for (int j = 1; j < n; j++) {
         double uprev = u[j];
 #ifdef MODEL_BACKWARDS
-        u_new[j] = uprev + beta * ((uprev) * (v[j + 1] - v[j - 1]) +
+        (*u_new)[j] = uprev + beta * ((uprev) * (v[j + 1] - v[j - 1]) +
                                    (v[j]) * (u[j + 1] - u[j - 1]));
 #else
-        u_new[j] = uprev + beta * ((uprev) * (v[j] - v[j - 1]) +
+        (*u_new)[j] = uprev + beta * ((uprev) * (v[j] - v[j - 1]) +
                                    (v[j]) * (u[j] - u[j - 1]));
 #endif
     }
@@ -214,14 +246,19 @@ Vector apply_Phi(const my_App *app, const Vector u, const Vector v,
 
 /* Compute A(u) - f */
 
-int my_TriResidual(braid_App app, braid_Vector uleft, braid_Vector uright,
-                   braid_Vector f, braid_Vector r, braid_TriStatus status) {
+int MyBraidApp::TriResidual(braid_Vector uleft_, braid_Vector uright_,
+                   braid_Vector f_, braid_Vector r_, BraidTriStatus &status) {
+    BraidVector *uleft = (BraidVector *) uleft_;
+    BraidVector *uright = (BraidVector *) uright_;
+    // BraidVector *f = (BraidVector *) f_;
+    BraidVector *r = (BraidVector *) r_;
+
     double t, tprev, tnext, dt;
     int level, index;
 
-    braid_TriStatusGetTriT(status, &t, &tprev, &tnext);
-    braid_TriStatusGetLevel(status, &level);
-    braid_TriStatusGetTIndex(status, &index);
+    status.GetTriT(&t, &tprev, &tnext);
+    status.GetLevel(&level);
+    status.GetTIndex(&index);
 
     /* Get the time-step size */
     if (t < tnext) {
@@ -230,50 +267,40 @@ int my_TriResidual(braid_App app, braid_Vector uleft, braid_Vector uright,
         dt = t - tprev;
     }
 
-    Vector u_res;
+    Vector u_res = new Vector_(1);
     // Compute u
     if (uleft == NULL) {
         // Collect initial conditions
-        Vector u = zero_vector(app->mspace);
-        Vector v = zero_vector(app->mspace);
-        for (int x = 0; x < app->mspace; x++) {
-            u[x] = initial_condition_u(x);
-            v[x] = initial_condition_v(x);
+        Vector u = new Vector_(mspace);
+        Vector v = new Vector_(mspace);
+        for (int x = 0; x < mspace; x++) {
+            (*u)[x] = initial_condition_u(x);
+            (*v)[x] = initial_condition_v(x);
         }
-        u_res = apply_Phi(app, u, v, t, dt);
+        u_res = this->apply_Phi(u, v, t, dt);
     } else {
-        u_res = apply_Phi(app, uleft->u, uleft->v, t, dt);
+        u_res = this->apply_Phi(uleft->u, uleft->v, t, dt);
     }
-    vec_axpy(app->mspace, 1.0, r->u, -1.0, u_res);
+    u_res = *r->u - u_res;
 
-    Vector v_res = zero_vector(app->mspace);
+    Vector v_res = new Vector_(mspace);
     if (uright != NULL) {
-        vec_copy(app->mspace, uright->w, v_res);
-        Vector LL = NULL;
-        Vector L = NULL;
-        Vector LU = NULL;
-        compute_L_matrix(app, r->u, app->mspace, &LL, &L, &LU, dt, t);
-        matmul_tridiag(LL, L, LU, app->mspace, &v_res);
+        Tridiag_Matrix L = this->compute_L_matrix(r->u, dt, t);
+        v_res = *L * uright->w;
     }
-    vec_axpy(app->mspace, 2.0 * app->dx * dt, r->v, -1.0, v_res);
+    v_res = *(*r->v * (2.0 * dx * dt)) - v_res;
 
-    Vector w_res = zero_vector(app->mspace);
+    Vector w_res = new Vector_(mspace);
     if (uright != NULL) {
-        vec_copy(app->mspace, uright->w, w_res);
-        Vector LL = NULL;
-        Vector L = NULL;
-        Vector LU = NULL;
-        compute_L_matrix(app, r->v, app->mspace, &LL, &L, &LU, dt, t);
-        for (int i = 0; i < app->mspace; i++) {
-            L[i] += 1;
-        }
-        matmul_tridiag(LL, L, LU, app->mspace, &w_res);
+        auto L = compute_L_matrix(r->v, dt, t);
+        (*L->a) += 1;
+        w_res = *L * uright->w;
     }
-    vec_axpy(app->mspace, -2.0 * app->dx * dt, r->u, 1.0, w_res);
+    w_res = *(*r->u * (-2.0 * dx * dt)) + w_res;
 
-    vec_copy(app->mspace, u_res, r->u);
-    vec_copy(app->mspace, v_res, r->v);
-    vec_copy(app->mspace, w_res, r->w);
+    r->u = u_res;
+    r->v = v_res;
+    r->w = w_res;
 
     return 0;
 }
@@ -282,69 +309,62 @@ int my_TriResidual(braid_App app, braid_Vector uleft, braid_Vector uright,
 
 /* Solve A(u) = f */
 
-int my_TriSolve(braid_App app, braid_Vector uleft, braid_Vector uright,
-                braid_Vector fleft, braid_Vector fright, braid_Vector f,
-                braid_Vector u, braid_TriStatus status) {
-    double dx = (app->dx);
+int MyBraidApp::TriSolve(braid_Vector uleft_, braid_Vector uright_,
+                braid_Vector fleft_, braid_Vector fright_, braid_Vector f_,
+                braid_Vector u_, BraidTriStatus &status) {
+    BraidVector *uleft = (BraidVector *) uleft_;
+    BraidVector *uright = (BraidVector *) uright_;
+    // BraidVector *f = (BraidVector *) f_;
+    BraidVector *u = (BraidVector *) u_;
+    // BraidVector *fleft = (BraidVector *) fleft_;
+    // BraidVector *fright = (BraidVector *) fright_;
 
     double t, tprev, tnext, dt;
 
     /* Get the time-step size */
-    braid_TriStatusGetTriT(status, &t, &tprev, &tnext);
+    status.GetTriT(&t, &tprev, &tnext);
     if (t < tnext) {
         dt = tnext - t;
     } else {
         dt = t - tprev;
     }
 
-    Vector u_new;
+    Vector u_new = new Vector_(1);
     // Compute u
     if (uleft == NULL) {
         // Collect initial conditions
-        Vector u = zero_vector(app->mspace);
-        Vector v = zero_vector(app->mspace);
-        for (int x = 0; x < app->mspace; x++) {
-            u[x] = initial_condition_u(x);
-            v[x] = initial_condition_v(x);
+        Vector u = new Vector_(mspace);
+        Vector v = new Vector_(mspace);
+        for (int x = 0; x < mspace; x++) {
+            (*u)[x] = initial_condition_u(x);
+            (*v)[x] = initial_condition_v(x);
         }
-        u_new = apply_Phi(app, u, v, t, dt);
+        u_new = this->apply_Phi(u, v, t, dt);
     } else {
-        u_new = apply_Phi(app, uleft->u, uleft->v, t, dt);
+        u_new = this->apply_Phi(uleft->u, uleft->v, t, dt);
     }
 
     // Compute v
-    Vector v_new = zero_vector(app->mspace);
+    Vector v_new = new Vector_(mspace);
     if (uright != NULL) {
-        Vector LL = NULL;
-        Vector L = NULL;
-        Vector LU = NULL;
-        compute_L_matrix(app, u_new, app->mspace, &LL, &L, &LU, dt, t);
-        vec_copy(app->mspace, uright->w, v_new);
-        matmul_tridiag(LL, L, LU, app->mspace, &v_new);
-        vec_scale(app->mspace, 1.0 / (2.0 * dx * dt), v_new);
+        auto L = this->compute_L_matrix(u_new, dt, t);
+        v_new = *(*L * uright->w) * (1.0 / (2.0 * dx * dt));
     }
-    // Compute w
-    Vector w_new = zero_vector(app->mspace);
-    if (uright != NULL) {
-        vec_copy(app->mspace, uright->w, w_new);
-        // Compute I+Lv
-        Vector LL = NULL;
-        Vector L = NULL;
-        Vector LU = NULL;
-        compute_L_matrix(app, v_new, app->mspace, &LL, &L, &LU, dt, t);
-        for (int i = 0; i < app->mspace; i++) {
-            L[i] += 1;
-        }
-        matmul_tridiag(LL, L, LU, app->mspace, &w_new);
-    }
-    vec_axpy(app->mspace, -2.0 * dx * dt, u_new, 1.0, w_new);
 
-    vec_copy(app->mspace, u_new, u->u);
-    vec_copy(app->mspace, v_new, u->v);
-    vec_copy(app->mspace, w_new, u->w);
+    // Compute w
+    Vector w_new = new Vector_(mspace);
+    if (uright != NULL) {
+        auto L = this->compute_L_matrix(v_new, dt, t);
+        w_new = *L * uright->w;
+    }
+    w_new = *(*u_new * (-2.0 * dx * dt)) + w_new;
+
+    u->u = u_new;
+    u->v = u_new;
+    u->w = u_new;
 
     /* no refinement */
-    braid_TriStatusSetRFactor(status, 1);
+    status.SetRFactor(1);
 
     return 0;
 }
@@ -353,21 +373,18 @@ int my_TriSolve(braid_App app, braid_Vector uleft, braid_Vector uright,
 
 /* This is only called from level 0 */
 
-int my_Init(braid_App app, double t, braid_Vector *u_ptr) {
+int MyBraidApp::Init(double t, braid_Vector *u_ptr_) {
+    BraidVector **u_ptr = (BraidVector **) u_ptr_;
     int i;
-    my_Vector *u;
-    int mspace = (app->mspace);
-
-    /* Allocate the vector */
-    u = (my_Vector *)malloc(sizeof(my_Vector));
-    u->u = zero_vector(mspace);
-    u->v = zero_vector(mspace);
-    u->w = zero_vector(mspace);
+    Vector uu = new Vector_(mspace);
+    Vector uv = new Vector_(mspace);
+    Vector uw = new Vector_(mspace);
+    BraidVector *u = new BraidVector(uu, uv, uw);
 
     for (i = 0; i <= mspace - 1; i++) {
-        u->u[i] = ((double)braid_Rand()) / braid_RAND_MAX;
-        u->v[i] = ((double)braid_Rand()) / braid_RAND_MAX;
-        u->w[i] = ((double)braid_Rand()) / braid_RAND_MAX;
+        (*u->u)[i] = ((double)braid_Rand()) / braid_RAND_MAX;
+        (*u->v)[i] = ((double)braid_Rand()) / braid_RAND_MAX;
+        (*u->w)[i] = ((double)braid_Rand()) / braid_RAND_MAX;
     }
 
     *u_ptr = u;
@@ -377,20 +394,15 @@ int my_Init(braid_App app, double t, braid_Vector *u_ptr) {
 
 /*------------------------------------*/
 
-int my_Clone(braid_App app, braid_Vector u, braid_Vector *v_ptr) {
-    int mspace = (app->mspace);
-    my_Vector *v;
+int MyBraidApp::Clone(braid_Vector u_, braid_Vector *v_ptr_) {
+    BraidVector *u = (BraidVector *) u_;
+    BraidVector **v_ptr = (BraidVector **) v_ptr_;
 
-    /* Allocate the vector */
-    v = (my_Vector *)malloc(sizeof(my_Vector));
+    Vector uu = new Vector_(*u->u);
+    Vector uv = new Vector_(*u->u);
+    Vector uw = new Vector_(*u->u);
 
-    v->u = zero_vector(app->mspace);
-    v->v = zero_vector(app->mspace);
-    v->w = zero_vector(app->mspace);
-
-    vec_copy(mspace, (u->u), (v->u));
-    vec_copy(mspace, (u->v), (v->v));
-    vec_copy(mspace, (u->w), (v->w));
+    BraidVector *v = new BraidVector(uu, uv, uw);
     *v_ptr = v;
 
     return 0;
@@ -398,36 +410,37 @@ int my_Clone(braid_App app, braid_Vector u, braid_Vector *v_ptr) {
 
 /*------------------------------------*/
 
-int my_Free(braid_App app, braid_Vector u) {
-    free(u->u);
-    free(u->v);
-    free(u->w);
-    free(u);
+int MyBraidApp::Free(braid_Vector u_) {
+    BraidVector *u = (BraidVector *) u_;
+    delete u;
 
     return 0;
 }
 
 /*------------------------------------*/
 
-int my_Sum(braid_App app, double alpha, braid_Vector x, double beta,
-           braid_Vector y) {
+int MyBraidApp::Sum(double alpha, braid_Vector x_, double beta,
+           braid_Vector y_) {
+    BraidVector *y = (BraidVector *) y_;
+    BraidVector *x = (BraidVector *) x_;
 
-    vec_axpy((app->mspace), alpha, (x->u), beta, (y->u));
-    vec_axpy((app->mspace), alpha, (x->v), beta, (y->v));
-    vec_axpy((app->mspace), alpha, (x->w), beta, (y->w));
+    y->u = *(*x->u * alpha) + y->u;
+    y->v = *(*x->v * alpha) + y->v;
+    y->w = *(*x->w * alpha) + y->w;
+
     return 0;
 }
 
 /*------------------------------------*/
 
-int my_SpatialNorm(braid_App app, braid_Vector u, double *norm_ptr) {
+int MyBraidApp::SpatialNorm(braid_Vector u_, double *norm_ptr) {
+    BraidVector *u = (BraidVector *) u_;
     int i;
     double dot = 0.0;
-    int mspace = (app->mspace);
     for (i = 0; i < mspace; i++) {
-        dot += (u->u)[i] * (u->u)[i];
-        dot += (u->v)[i] * (u->v)[i];
-        dot += (u->w)[i] * (u->w)[i];
+        dot += (*u->u)[i] * (*u->u)[i];
+        dot += (*u->v)[i] * (*u->v)[i];
+        dot += (*u->w)[i] * (*u->w)[i];
     }
     *norm_ptr = sqrt(dot);
 
@@ -436,28 +449,29 @@ int my_SpatialNorm(braid_App app, braid_Vector u, double *norm_ptr) {
 
 /*------------------------------------*/
 
-int my_Access(braid_App app, braid_Vector u, braid_AccessStatus astatus) {
+int MyBraidApp::Access(braid_Vector u_, BraidAccessStatus &astatus) {
+    BraidVector *u = (BraidVector *) u_;
+
     int done, index;
-    int mspace = (app->mspace);
 
     /* Print solution to file if simulation is over */
-    braid_AccessStatusGetDone(astatus, &done);
+    astatus.GetDone(&done);
     if (done) {
         int j;
 
-        braid_AccessStatusGetTIndex(astatus, &index);
+        astatus.GetTIndex(&index);
 
-        fprintf((app->ufile), "%05d: ", index);
-        fprintf((app->vfile), "%05d: ", index);
-        fprintf((app->wfile), "%05d: ", index);
+        fprintf(ufile, "%05d: ", index);
+        fprintf(vfile, "%05d: ", index);
+        fprintf(wfile, "%05d: ", index);
         for (j = 0; j < (mspace - 1); j++) {
-            fprintf((app->ufile), "% 1.14e, ", (u->u[j]));
-            fprintf((app->vfile), "% 1.14e, ", (u->v[j]));
-            fprintf((app->wfile), "% 1.14e, ", (u->w[j]));
+            fprintf(ufile, "% 1.14e, ", (*u->u)[j]);
+            fprintf(vfile, "% 1.14e, ", (*u->v)[j]);
+            fprintf(wfile, "% 1.14e, ", (*u->w)[j]);
         }
-        fprintf((app->ufile), "% 1.14e\n", (u->u[j]));
-        fprintf((app->vfile), "% 1.14e\n", (u->v[j]));
-        fprintf((app->wfile), "% 1.14e\n", (u->w[j]));
+        fprintf(ufile, "% 1.14e\n", (*u->u)[j]);
+        fprintf(vfile, "% 1.14e\n", (*u->v)[j]);
+        fprintf(wfile, "% 1.14e\n", (*u->w)[j]);
     }
 
     return 0;
@@ -465,46 +479,67 @@ int my_Access(braid_App app, braid_Vector u, braid_AccessStatus astatus) {
 
 /*------------------------------------*/
 
-int my_BufSize(braid_App app, int *size_ptr, braid_BufferStatus bstatus) {
-    *size_ptr = 3 * (app->mspace) * sizeof(double);
+int MyBraidApp::BufSize(int *size_ptr, BraidBufferStatus &bstatus) {
+    *size_ptr = 3 * mspace * sizeof(double);
     return 0;
 }
 
 /*------------------------------------*/
 
-int my_BufPack(braid_App app, braid_Vector u, void *buffer,
-               braid_BufferStatus bstatus) {
-    double *dbuffer = buffer;
+int MyBraidApp::BufPack(braid_Vector u_, void *buffer,
+               BraidBufferStatus &bstatus) {
+    BraidVector *u = (BraidVector *) u_;
+    double *dbuffer = (double *) buffer;
 
-    vec_copy((app->mspace), (u->u), dbuffer);
-    dbuffer += (app->mspace);
-    vec_copy((app->mspace), (u->v), dbuffer);
-    dbuffer += (app->mspace);
-    vec_copy((app->mspace), (u->w), dbuffer);
-    braid_BufferStatusSetSize(bstatus, 3 * (app->mspace) * sizeof(double));
+    for (int i = 0; i < mspace; i++) {
+        u->u[i] = dbuffer[i];
+        dbuffer[i] = (*u->u)[i];
+    }
+    dbuffer += mspace;
+
+    for (int i = 0; i < mspace; i++) {
+        u->v[i] = dbuffer[i];
+        dbuffer[i] = (*u->v)[i];
+    }
+    dbuffer += mspace;
+    
+    for (int i = 0; i < mspace; i++) {
+        u->w[i] = dbuffer[i];
+        dbuffer[i] = (*u->w)[i];
+    }
+    bstatus.SetSize(3 * mspace * sizeof(double));
 
     return 0;
 }
 
 /*------------------------------------*/
 
-int my_BufUnpack(braid_App app, void *buffer, braid_Vector *u_ptr,
-                 braid_BufferStatus bstatus) {
-    my_Vector *u = NULL;
-    double *dbuffer = buffer;
+int MyBraidApp::BufUnpack(void *buffer, braid_Vector *u_ptr_,
+                 BraidBufferStatus &bstatus) {
+    BraidVector **u_ptr = (BraidVector **) u_ptr_;
+    Vector uu = new Vector_(mspace);
+    Vector uv = new Vector_(mspace);
+    Vector uw = new Vector_(mspace);
+    BraidVector *u = new BraidVector(uu, uv, uw);
+    double *dbuffer = (double *) buffer;
 
-    /* Allocate memory */
-    u = (my_Vector *)malloc(sizeof(my_Vector));
-    vec_create((app->mspace), &(u->u));
-    vec_create((app->mspace), &(u->v));
-    vec_create((app->mspace), &(u->w));
+    for (int i = 0; i < mspace; i++) {
+        u->u[i] = dbuffer[i];
+        dbuffer[i] = (*u->u)[i];
+    }
+    dbuffer += mspace;
 
-    /* Unpack the buffer */
-    vec_copy((app->mspace), dbuffer, (u->u));
-    dbuffer += (app->mspace);
-    vec_copy((app->mspace), dbuffer, (u->v));
-    dbuffer += (app->mspace);
-    vec_copy((app->mspace), dbuffer, (u->w));
+    for (int i = 0; i < mspace; i++) {
+        u->v[i] = dbuffer[i];
+        dbuffer[i] = (*u->v)[i];
+    }
+    dbuffer += mspace;
+    
+    for (int i = 0; i < mspace; i++) {
+        u->w[i] = dbuffer[i];
+        dbuffer[i] = (*u->w)[i];
+    }
+    bstatus.SetSize(3 * mspace * sizeof(double));
 
     *u_ptr = u;
     return 0;
@@ -515,10 +550,7 @@ int my_BufUnpack(braid_App app, void *buffer, braid_Vector *u_ptr,
  *--------------------------------------------------------------------------*/
 
 int main(int argc, char *argv[]) {
-    braid_Core core;
-    my_App *app;
-
-    double tstart, tstop, dt, dx, start, end;
+    double tstart, tstop, dx, start, end;
     int rank, ntime, mspace, arg_index;
     int max_levels, min_coarse, nrelax, nrelaxc, cfactor, maxiter;
     int access_level, print_level;
@@ -617,46 +649,43 @@ int main(int argc, char *argv[]) {
     /* Define time domain and step */
     tstart = 0.0; /* Beginning of time domain */
     tstop = 1.0;  /* End of time domain*/
-    dt = (tstop - tstart) / ntime;
 
     /* Set up the app structure */
-    app = (my_App *)malloc(sizeof(my_App));
-    app->myid = rank;
-    app->ntime = ntime;
-    app->mspace = mspace;
-    app->dx = dx;
+    auto app = MyBraidApp(MPI_COMM_WORLD, rank, tstart, tstop, ntime);
+    app.myid = rank;
+    app.ntime = ntime;
+    app.mspace = mspace;
+    app.dx = dx;
 
     char filename[255];
-    sprintf(filename, "%s.%03d", "modelproblem.out.u", (app->myid));
-    (app->ufile) = fopen(filename, "w");
-    sprintf(filename, "%s.%03d", "modelproblem.out.v", (app->myid));
-    (app->vfile) = fopen(filename, "w");
-    sprintf(filename, "%s.%03d", "modelproblem.out.w", (app->myid));
-    (app->wfile) = fopen(filename, "w");
+    sprintf(filename, "%s.%03d", "modelproblem.out.u", (app.myid));
+    (app.ufile) = fopen(filename, "w");
+    sprintf(filename, "%s.%03d", "modelproblem.out.v", (app.myid));
+    (app.vfile) = fopen(filename, "w");
+    sprintf(filename, "%s.%03d", "modelproblem.out.w", (app.myid));
+    (app.wfile) = fopen(filename, "w");
 
     /* Initialize XBraid */
-    braid_InitTriMGRIT(MPI_COMM_WORLD, MPI_COMM_WORLD, dt, tstop, ntime - 1,
-                       app, my_TriResidual, my_TriSolve, my_Init, my_Clone,
-                       my_Free, my_Sum, my_SpatialNorm, my_Access, my_BufSize,
-                       my_BufPack, my_BufUnpack, &core);
+
+    auto core = BraidTriCore(MPI_COMM_WORLD, &app);
 
     /* Set some XBraid(_Adjoint) parameters */
-    braid_SetMaxLevels(core, max_levels);
-    braid_SetMinCoarse(core, min_coarse);
-    braid_SetNRelax(core, -1, nrelax);
+    core.SetMaxLevels(max_levels);
+    core.SetMinCoarse(min_coarse);
+    core.SetNRelax(-1, nrelax);
     if (max_levels > 1) {
-        braid_SetNRelax(core, max_levels - 1,
+        core.SetNRelax(max_levels - 1,
                         nrelaxc); /* nrelax on coarsest level */
     }
-    braid_SetCFactor(core, -1, cfactor);
-    braid_SetAccessLevel(core, access_level);
-    braid_SetPrintLevel(core, print_level);
-    braid_SetMaxIter(core, maxiter);
-    braid_SetAbsTol(core, tol);
+    core.SetCFactor(-1, cfactor);
+    core.SetAccessLevel(access_level);
+    core.SetPrintLevel(print_level);
+    core.SetMaxIter(maxiter);
+    core.SetAbsTol(tol);
 
     /* Parallel-in-time TriMGRIT simulation */
     start = clock();
-    braid_Drive(core);
+    core.Drive();
     end = clock();
 
     /* Print runtime to file (for runtime comparisons)*/
@@ -707,9 +736,6 @@ int main(int argc, char *argv[]) {
     //      apply_TriResidual(app, z, NULL, NULL, e, 1, dt);
     //   }
 
-    free(app);
-
-    braid_Destroy(core);
     MPI_Finalize();
 
     return (0);
