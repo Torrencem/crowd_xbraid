@@ -102,74 +102,38 @@ double initial_condition_u(const double x) { return 0.25 * x; }
 double initial_condition_v(const double x) { return 0.0; }
 
 void compute_L_matrix(const my_App *app, const double *v, const int n,
-                      Vector *LL, Vector *L, Vector *LU, const double dt,
-  		      const double t) {
+                      Matrix *L, const double dt, const double t) {
+    Vector LL, LC, LU;
     // Set LL
     double c = 1.0;
     double beta_neg = fmin(c, 0.0) * (dt / (app->dx));
     double beta_pos = fmax(c, 0.0) * (dt / (app->dx));
 
-    *LL = zero_vector(n - 1);
+    LL = zero_vector(n - 1);
     for (int i = 0; i < n - 1; i++) {
-//#ifdef MODEL_UPWIND
-    (*LL) [i] = -beta_pos * v[i];
-
-/*        
-#else
-    
-    (*LL)[i] = v[i];
-    
-#endif
+        LL[i] = -beta_pos * v[i];
     }
-*/
+
     // Set L
-    *L = zero_vector(n);
-/*
-#ifdef MODEL_UPWIND
-    //(*L) [0] = initial_condition_v(t);
-    continue;
-#else
-    // Edge cases
-    (*L) [0] = v[1] - left_boundary_solution_v(t);
-    (*L) [n - 1] = right_boundary_solution_v(t);
-#endif
-    // Middle indices
-*/    
-//#ifdef MODEL_UPWIND
-    for(int i = 0; i < n - 1; i++){
-        *(L) [i] = 1 + beta_pos * (v[i - 1] - 2*v[i]) - 
+    LC = zero_vector(n);
+
+    for(int i = 0; i < n; i++){
+        LC[i] = 1 + beta_pos * (v[i - 1] - 2*v[i]) - 
                        beta_neg * (2*v[i] - v[i + 1]);
     }
-/*
-#else
-    for (int i = 1; i < n - 2; i++) {
-            (*L)[i] = v[i + 1] - v[i - 1];
-    }
-#endif
 
-#ifdef MODEL_UPWIND
-
-    //(*L) [n-1] = v[n - 2] - 2 * v[n - 3];//boundary condition 
-#else
-    // Edge cases
-    // TODO: allow for specification of u or v vectors
-    (*L)[0] = v[1] - left_boundary_solution_v(t);
-    // Last element of L
-    (*L)[n - 1] = right_boundary_solution_v(t) - v[n - 2];
-#endif */
     // Set LU
-    *LU = zero_vector(n - 1);
-//#ifdef MODEL_UPWIND
+    LU = zero_vector(n - 1);
+
     for (int i = 0; i < n - 1; i++){
-        (*LU)[0] = beta_neg * v[i];
+        LU[0] = beta_neg * v[i];
     }
-    /*
-#else
-    for (int i = 0; i < n - 1; i++) {
-        (*LU)[i] = -v[i];
-    }
-#endif */
-} 
+
+    *L = tridiag_to_matrix(LL, LC, LU, n);
+
+    set_element(*L, n, n, 0, n - 1, -beta_pos * v[0]);
+    set_element(*L, n, n, n - 1, 0, beta_neg * v[n - 1]);
+}
 
 Vector compute_b_vector(const int n, const double *w, const double t) {
     double vleft = left_boundary_solution_v(t);
@@ -186,58 +150,23 @@ Vector apply_Phi(const my_App *app, const Vector u, const Vector v,
                  const double t, const double dt) {
     Vector u_new = zero_vector(app->mspace);
     double c = 1.0;
-//#ifdef MODEL_UPWIND
-    //double beta = c*(dt / (app->dx)); //CFL Number we aim to keep < 1
     double beta_neg = fmin(c,0.0) * (dt / (app->dx));
     double beta_pos = fmax(c,0.0) * (dt / (app->dx));
-/*    #else
-    double beta = c*(dt / (2.0 * app->dx));
-#endif */
     int n = app->mspace-1;
     // Space Boundary Conditions
     // j = 0
-    // TODO:  NEED TO LOOK AT BOUNDARIES. i am confused if this is actually applying boundary conditions correctly especially since we have moved to upwind
-    // 	Do we want to include the boundary solutions or are they not solely in the solution vector? (that is they are updated so we should not be using them beore the first row as they will be updated
-//#ifdef MODEL_UPWIND
     u_new[0] = u[0] * (1 - beta_neg * (2*v[0] - v[1]) + //is right boundary solution v == v[n] and can we do that in this?
                               beta_pos * (v[n - 1] - 2*v[0])) + beta_neg * u[1] * v[0] - beta_pos * v[0] * u[n - 1]; //periodic boundaries
    
-    //u_new[0] = u[0] + beta * (u[1] * (v[1] - v[0]) + v[0] * (u[1] - u[0])); this is the time step
-/*
-#else
-    u_new[0] = u[0] + beta * ((u[0]) * (v[1] - left_boundary_solution_v(t)) +
-                              (v[0]) * (u[1] - left_boundary_solution_u(t)));
-#endif
-*/
     // j = app->mspace
-    // TODO: What is this updating exactly? It needs to update time not space which is what n is referring to. u_new needs to be a pointer array in this case 
-//#ifdef MODEL_UPWIND
-    //int n = app->mspace - 1;
     u_new[n - 1] =
         u[n - 1] * (1 - beta_neg * (2 * v[n - 1] - v[0]) + beta_pos * (v[n - 2] - 2 * v[n - 1])) - beta_pos * v[n - 1] * u[n - 2] + beta_neg * v[n - 1] * u[0];
-/*
-#else
-    int n = app->mspace - 1;
-    u_new[n] =
-        u[n] + beta * ((u[n]) * (right_boundary_solution_v(t) - v[n - 1]) +
-                       (v[n]) * (right_boundary_solution_u(t) - u[n - 1]));
-#endif */
 
     // Non-Boundary points
-    // TODO: Again not entirely sure this is correctly propogating the space grid
     for (int j = 1; j < n - 1; j++) {
         double uprev = u[j];
-//#ifdef MODEL_UPWIND
-        /* u_new[j] = uprev + beta_neg * ((uprev) * (v[j + 1] - v[j]) +
-                                   (v[j]) * (u[j + 1] - u[j])); */
         u_new[j] = uprev - beta_neg * ((uprev) * (v[j + 1] - v[j]) + v[j] * (u[j + 1] - uprev)) - 
                                beta_pos * (uprev * (v[j] - v[j - 1]) + v[j] * (uprev - u[j - 1]));
-
-/*
-#else
-        u_new[j] = uprev + beta * ((uprev) * (v[j] - v[j - 1]) +
-                                   (v[j]) * (u[j] - u[j - 1]));
-#endif */
     }
     return u_new;
 }
@@ -285,25 +214,22 @@ int my_TriResidual(braid_App app, braid_Vector uleft, braid_Vector uright,
     Vector v_res = zero_vector(app->mspace);
     if (uright != NULL) {
         vec_copy(app->mspace, uright->w, v_res);
-        Vector LL = NULL;
         Vector L = NULL;
-        Vector LU = NULL;
-        compute_L_matrix(app, r->u, app->mspace, &LL, &L, &LU, dt, t);
-        matmul_tridiag(LL, L, LU, app->mspace, &v_res);
+        compute_L_matrix(app, r->u, app->mspace, &L, dt, t);
+        matmul(L, app->mspace, app->mspace, &v_res);
     }
     vec_axpy(app->mspace, 2.0 * app->dx * dt, r->v, -1.0, v_res);
 
     Vector w_res = zero_vector(app->mspace);
     if (uright != NULL) {
         vec_copy(app->mspace, uright->w, w_res);
-        Vector LL = NULL;
         Vector L = NULL;
-        Vector LU = NULL;
-        compute_L_matrix(app, r->v, app->mspace, &LL, &L, &LU, dt, t);
+        compute_L_matrix(app, r->v, app->mspace, &L, dt, t);
         for (int i = 0; i < app->mspace; i++) {
-            L[i] += 1;
+            double val = get_element(L, app->mspace, app->mspace, i, i);
+            set_element(L, app->mspace, app->mspace, i, i, val);
         }
-        matmul_tridiag(LL, L, LU, app->mspace, &w_res);
+        matmul(L, app->mspace, app->mspace, &w_res);
     }
     vec_axpy(app->mspace, -2.0 * app->dx * dt, r->u, 1.0, w_res);
 
@@ -351,12 +277,10 @@ int my_TriSolve(braid_App app, braid_Vector uleft, braid_Vector uright,
     // Compute v
     Vector v_new = zero_vector(app->mspace);
     if (uright != NULL) {
-        Vector LL = NULL;
         Vector L = NULL;
-        Vector LU = NULL;
-        compute_L_matrix(app, u_new, app->mspace, &LL, &L, &LU, dt, t);
+        compute_L_matrix(app, u_new, app->mspace, &L, dt, t);
         vec_copy(app->mspace, uright->w, v_new);
-        matmul_tridiag(LL, L, LU, app->mspace, &v_new);
+        matmul(L, app->mspace, app->mspace, &v_new);
         vec_scale(app->mspace, 1.0 / (2.0 * dx * dt), v_new);
     }
     // Compute w
@@ -364,14 +288,13 @@ int my_TriSolve(braid_App app, braid_Vector uleft, braid_Vector uright,
     if (uright != NULL) {
         vec_copy(app->mspace, uright->w, w_new);
         // Compute I+Lv
-        Vector LL = NULL;
         Vector L = NULL;
-        Vector LU = NULL;
-        compute_L_matrix(app, v_new, app->mspace, &LL, &L, &LU, dt, t);
+        compute_L_matrix(app, v_new, app->mspace, &L, dt, t);
         for (int i = 0; i < app->mspace; i++) {
-            L[i] += 1;
+            double val = get_element(L, app->mspace, app->mspace, i, i);
+            set_element(L, app->mspace, app->mspace, i, i, val + 1.0);
         }
-        matmul_tridiag(LL, L, LU, app->mspace, &w_new);
+        matmul(L, app->mspace, app->mspace, &w_new);
     }
     vec_axpy(app->mspace, -2.0 * dx * dt, u_new, 1.0, w_new);
 

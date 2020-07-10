@@ -94,7 +94,7 @@ BRAID_LIB_FILE = $(BRAID_DIR)/libbraid.a
 .SUFFIXES:
 .SUFFIXES: .c .o
 
-all: xbraid crowd model_problem burger
+all: xbraid crowd model_problem model_problem_upwind burger
 
 xbraid: ./xbraid/braid/*.c
 	cd xbraid; $(MAKE) braid
@@ -135,7 +135,7 @@ model_problem_upwind: src/model_problem_upwind.c $(BRAID_LIB_FILE)
 
 clean:
 	rm -f *.out.*
-	rm -f *.o crowd utils model_problem tests model_problem_backwards
+	rm -f *.o crowd utils model_problem tests model_problem_backwards model_problem_upwind burger
 
 fmt: src/*.c
 	for file in $^ ; do \
