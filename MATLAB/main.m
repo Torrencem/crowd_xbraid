@@ -7,8 +7,8 @@ global lambda
 global q
 global h
 
-space_steps = 8;
-time_steps = 8;
+space_steps = 10;
+time_steps = 12;
 m = rand(space_steps * time_steps, 1);
 rho = rand(space_steps * time_steps, 1);
 lambda = rand(space_steps * time_steps, 1);
@@ -25,7 +25,7 @@ q = q * (1/h);
 
 iters = 5;
 for i=1:iters
-    b = -[get_GwL(); get_GlambdaL()];
+    b = -[get_GwL(m, rho, lambda); get_GlambdaL(m, rho)];
     disp(norm(b)); % Quick and dirty way to check convergence.
     A = [get_A(), (get_D())'; zeros(space_steps * time_steps, space_steps * time_steps * 2), get_S()];
     solution = A\b;
@@ -118,10 +118,7 @@ function S = get_S()
     S = -D * inv(A) * D';
 end
 
-function GwL = get_GwL()
-    global m
-    global rho
-    global lambda
+function GwL = get_GwL(m, rho, lambda)
     As = get_As();
     At = get_At();
     D1 = get_derivative_matrix_space();
@@ -131,9 +128,7 @@ function GwL = get_GwL()
     GwL = [GmM; GmRho];
 end
 
-function GlambdaL = get_GlambdaL()
-    global m
-    global rho
+function GlambdaL = get_GlambdaL(m, rho)
     global q
     D = get_D();
     GlambdaL = get_D() * [m; rho] - q;
