@@ -11,15 +11,15 @@ space_steps = 8;
 time_steps = 8;
 m = rand(space_steps * time_steps, 1);
 rho = rand(space_steps * time_steps, 1);
-lambda = rand(space_steps * time_steps * 2, 1);
-q = sparse(space_steps * (time_steps + 1));
+lambda = rand(space_steps * time_steps, 1);
+q = sparse(space_steps * time_steps, 1);
 
 time = 1;
 h = time/time_steps;
 
 % Initial and final conditions
 q(1:space_steps/2) = ones(space_steps/2, 1);
-q(space_steps * time_steps + 1 + space_steps/2 : space_steps * time_steps + space_steps) = ones(space_steps/2, 1);
+q(space_steps * (time_steps-1) + 1 + space_steps/2 : space_steps * time_steps) = ones(space_steps/2, 1);
 
 q = q * (1/h);
 
@@ -27,25 +27,26 @@ iters = 5;
 for i=1:iters
     b = -[get_GwL(); get_GlambdaL()];
     disp(norm(b)); % Quick and dirty way to check convergence.
-    A = [get_A(), (get_D())'; zeros(space_steps * time_steps * 2), get_S()];
-    solution = linsolve(A, b);
+    A = [get_A(), (get_D())'; zeros(space_steps * time_steps, space_steps * time_steps * 2), get_S()];
+    solution = A\b;
     alpha = line_search(solution);
     m = m + alpha * solution(1 : space_steps * time_steps);
     rho = rho + alpha * solution(space_steps * time_steps + 1 : space_steps * time_steps * 2);
-    lambda = lambda + alpha * solution(space_steps * time_steps * 2 + 1 : space_steps * time_steps * 4);
+    lambda = lambda + alpha * solution(space_steps * time_steps * 2 + 1 : space_steps * time_steps * 3);
 end
 
 function D = get_derivative_matrix_time()
     global space_steps
     global time_steps
-    D = sparse(space_steps * time_steps);
+    global h
+    D = sparse(space_steps * time_steps, space_steps * time_steps);
     for j=1:space_steps
         D(j, j) = 1;
     end
     for i=2:time_steps
         for j=1:space_steps
-            D(j, j) = 1;
-            D(j, j - space_steps) = -1;
+            D(space_steps * (i-1) + j, space_steps * (i-1) + j) = 1;
+            D(space_steps * (i-1) + j, space_steps * (i-2) + j) = -1;
         end
     end
     D = (1/h) * D;
@@ -55,7 +56,7 @@ function D = get_derivative_matrix_space()
     global space_steps
     global time_steps
     global h
-    D = sparse(space_steps);
+    D = sparse(space_steps, space_steps);
     D(1, 1) = 1;
     for i=2:space_steps
         D(i, i) = 1;
@@ -69,13 +70,13 @@ end
 function As = get_As()
     global space_steps
     global time_steps
-    As = sparse(space_steps);
+    As = sparse(space_steps, space_steps);
     As(1, 1) = 1;
     for i=2:space_steps
         As(i, i) = 1/2;
         As(i, i-1) = 1/2;
     end
-    Asrep = repmat({A}, 1, time_steps);
+    Asrep = repmat({As}, 1, time_steps);
     As = blkdiag(Asrep{:});
 end
 
@@ -84,14 +85,14 @@ function At = get_At()
     global time_steps
     global space_steps
     global time_steps
-    At = sparse(space_steps * time_steps);
+    At = sparse(space_steps * time_steps, space_steps * time_steps);
     for j=1:space_steps
         At(j, j) = 1/2;
     end
     for i=2:time_steps
         for j=1:space_steps
-            At(j, j) = 1/2;
-            At(j, j - space_steps) = 1/2;
+            At(space_steps * (i-1) + j, space_steps * (i-1) + j) = 1/2;
+            At(space_steps * (i-1) + j, space_steps * (i-2) + j) = 1/2;
         end
     end
 end
@@ -108,24 +109,36 @@ function A = get_A()
 end
 
 function D = get_D()
-    D = blkdiag(get_derivative_matrix_space(), get_derivative_matrix_time());
+    D = [get_derivative_matrix_space(), get_derivative_matrix_time()];
 end
 
 function S = get_S()
     D = get_D();
     A = get_A();
-    S = -D' * inv(A) * D;
+    S = -D * inv(A) * D';
 end
 
 function GwL = get_GwL()
-    global space_steps
-    global time_steps
+    global m
+    global rho
+    global lambda
+    As = get_As();
+    At = get_At();
+    D1 = get_derivative_matrix_space();
+    D2 = get_derivative_matrix_time();
+    GmM = 2 * diag(m) * As' * At * (1./rho) + D1' * lambda;
+    GmRho = -diag(1./(rho.^2)) * At' * As * (m.^2) + D2' * lambda;
+    GwL = [GmM; GmRho];
 end
 
 function GlambdaL = get_GlambdaL()
-    global space_steps
-    global time_steps
+    global m
+    global rho
+    global q
+    D = get_D();
+    GlambdaL = get_D() * [m; rho] - q;
 end
 
 function alpha = line_search(solution)
+    alpha = 0.03;
 end
