@@ -51,14 +51,12 @@ double I_T(std::vector<Vector> ms, std::vector<Vector> vs, double dt, double dx)
 
 double I_T_diff(std::vector<Vector> ms, std::vector<Vector> vs, double dt, double dx) {
 	double IT1 = 0.0; double IT2 = 0.0;
-	for (int time = 0; time < ms.size()-1; time++) {
 		for(int x = 0; x < ms[0].len; x++) {
 			IT1 += (F_deriv(ms[time + 1][x] * abs(vs[time + 1][x]) *
 			abs(vs[time + 1][x] + E(ms[time + 1][x])) *dx * dt * 0.5);
 			IT2 += (F_deriv(ms[time][x] * abs(vs[time][x]) *
 			abs[time][x] + E(ms[time][x])) * dx * dt * 0.5);
 		}
-	}
 	return abs(IT1 - IT2);
 }
 
@@ -201,7 +199,7 @@ int main(int argc, char **argv) {
             	I_T_last = I_T_new;
 */
 	        double error = IT_diff(ms, vs, dt, dx);
-		
+	
 		fprintf(stderr, "Error: %2.15e\n", error);
             	if (error < e1) {
                 	fprintf(stderr, "Converged!\n");
