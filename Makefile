@@ -135,7 +135,7 @@ model_problem_upwind: src/model_problem_upwind.c $(BRAID_LIB_FILE)
 
 clean:
 	rm -f *.out.*
-	rm -f *.o crowd utils model_problem tests model_problem_backwards
+	rm -f *.o crowd utils model_problem tests model_problem_backwards model_problem_upwind burger
 
 fmt: src/*.c
 	for file in $^ ; do \
