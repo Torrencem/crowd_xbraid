@@ -154,15 +154,50 @@ void test_join() {
     std::cout << joinlr(m, m2) << std::endl;
 }
 
+double GR = 1.61803398875;
+
+template <typename F>
+double minarg(F f, double a, double b, double tol = 1e-5) {
+    double c = b - (b - a) / GR;
+    double d = a + (b - a) / GR;
+    while (abs(c - d) > tol) {
+        if (f(c) < f(d)) {
+            b = d;
+        } else {
+            a = c;
+        }
+
+        c = b - (b - a) / GR;
+        d = a + (b - a) / GR;
+    }
+
+    return (b + a) / 2;
+}
+
+void test_min() {
+    auto square = [](double x) { return (x - 1.5) * (x - 1.5); };
+    double min = minarg(square, -10.0, 10.0, 1e-6);
+    std::cout << "Min is around: " << min << std::endl;
+}
+
 int main() {
     // test_block_diag();
     // test_join();
+    test_min();
+    exit(0);
     int mspace = 20;
     int ntime = 12;
-    Vector m(1.1, mspace * ntime);
-    Vector rho(1.1, mspace * ntime);
-    Vector lambda(1.1, mspace * ntime);
-    Sparse q(mspace * ntime, 1);
+    
+    int rho_size = mspace * ntime;
+    int lambda_size = mspace * (ntime + 1);
+
+    Vector m(rho_size);
+    Vector rho(rho_size);
+    Vector lambda(lambda_size);
+    m.setConstant(1.1);
+    rho.setConstant(1.1);
+    lambda.setConstant(1.1);
+    Sparse q(lambda_size, 1);
 
     int time = 1;
     int iters = 20;
