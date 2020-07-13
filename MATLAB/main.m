@@ -6,6 +6,7 @@ global rho
 global lambda
 global q
 global h
+global trust_radius
 
 space_steps = 10;
 time_steps = 12;
@@ -23,13 +24,16 @@ q(space_steps * (time_steps-1) + 1 + space_steps/2 : space_steps * time_steps) =
 
 q = q * (1/h);
 
-iters = 5;
+trust_radius = 0.1;
+
+iters = 10;
 for i=1:iters
     b = -[get_GwL(m, rho, lambda); get_GlambdaL(m, rho)];
     disp(norm(b)); % Quick and dirty way to check convergence.
     A = [get_A(), (get_D())'; zeros(space_steps * time_steps, space_steps * time_steps * 2), get_S()];
     solution = A\b;
     alpha = line_search(solution);
+    disp(alpha);
     m = m + alpha * solution(1 : space_steps * time_steps);
     rho = rho + alpha * solution(space_steps * time_steps + 1 : space_steps * time_steps * 2);
     lambda = lambda + alpha * solution(space_steps * time_steps * 2 + 1 : space_steps * time_steps * 3);
@@ -135,5 +139,33 @@ function GlambdaL = get_GlambdaL(m, rho)
 end
 
 function alpha = line_search(solution)
-    alpha = 0.03;
+    global trust_radius
+    global space_steps
+    global time_steps
+    global m
+    global rho
+    global lambda
+
+    a = -trust_radius;
+    b = trust_radius;
+    dm = solution(1:space_steps*time_steps);
+    drho = solution(space_steps * time_steps + 1 : space_steps * time_steps * 2);
+    dlambda = solution(space_steps * time_steps * 2 + 1 : space_steps * time_steps * 3);
+    f = @(x) (norm(get_GwL(m+x*dm, rho+x*drho, lambda+x*dlambda))^2 + norm(get_GlambdaL(m+x*dm, rho+x*drho))^2);
+    gr = (1+sqrt(5))/2;
+    
+    c = b - (b - a)/gr;
+    d = a + (b - a)/gr;
+    
+    while abs(c-d) > 1e-5
+        if f(c) < f(d)
+            b = d;
+        else
+            a = c;
+        end
+        c = b - (b - a)/gr;
+        d = a + (b - a)/gr;
+    end
+    
+    alpha = (a+b)/2;
 end
