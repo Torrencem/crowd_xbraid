@@ -10,9 +10,9 @@ global trust_radius
 
 space_steps = 10;
 time_steps = 12;
-m = rand(space_steps * time_steps, 1);
-rho = rand(space_steps * time_steps, 1);
-lambda = rand(space_steps * time_steps, 1);
+m = rand(space_steps * time_steps, 1) + 0.1;
+rho = rand(space_steps * time_steps, 1) + 0.1;
+lambda = rand(space_steps * time_steps, 1) + 0.1;
 q = sparse(space_steps * time_steps, 1);
 
 time = 1;
@@ -20,20 +20,22 @@ h = time/time_steps;
 
 % Initial and final conditions
 q(1:space_steps/2) = ones(space_steps/2, 1);
+q(space_steps/2+1:space_steps) = ones(space_steps/2, 1) * 0.1;
+q(space_steps * (time_steps - 1) + 1 : space_steps * (time_steps - 1) + space_steps/2) = ones(space_steps/2, 1) * 0.1;
 q(space_steps * (time_steps-1) + 1 + space_steps/2 : space_steps * time_steps) = ones(space_steps/2, 1);
 
 q = q * (1/h);
 
-trust_radius = 0.1;
+trust_radius = 1;
 
 iters = 10;
 for i=1:iters
     b = -[get_GwL(m, rho, lambda); get_GlambdaL(m, rho)];
     disp(norm(b)); % Quick and dirty way to check convergence.
+    Q = get_A();
     A = [get_A(), (get_D())'; zeros(space_steps * time_steps, space_steps * time_steps * 2), get_S()];
     solution = A\b;
     alpha = line_search(solution);
-    disp(alpha);
     m = m + alpha * solution(1 : space_steps * time_steps);
     rho = rho + alpha * solution(space_steps * time_steps + 1 : space_steps * time_steps * 2);
     lambda = lambda + alpha * solution(space_steps * time_steps * 2 + 1 : space_steps * time_steps * 3);
@@ -78,15 +80,13 @@ function As = get_As()
     As(1, 1) = 1;
     for i=2:space_steps
         As(i, i) = 1/2;
-        As(i, i-1) = 1/2;
+        As(i, i-1) = 1/2; 
     end
     Asrep = repmat({As}, 1, time_steps);
     As = blkdiag(Asrep{:});
 end
 
 function At = get_At()
-    global space_steps
-    global time_steps
     global space_steps
     global time_steps
     At = sparse(space_steps * time_steps, space_steps * time_steps);
