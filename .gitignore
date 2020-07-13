@@ -7,5 +7,6 @@ model_problem_backwards
 libgfortran.a
 tests
 burger
+crowd_horesh
 **/*.dSYM/*
 compile_flags.txt
