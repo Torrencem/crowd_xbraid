@@ -8,11 +8,11 @@ global q
 global h
 global trust_radius
 
-space_steps = 10;
+space_steps = 20;
 time_steps = 12;
-m = rand(space_steps * time_steps, 1) + 0.1;
-rho = rand(space_steps * time_steps, 1) + 0.1;
-lambda = rand(space_steps * time_steps, 1) + 0.1;
+m = ones(space_steps * time_steps, 1) + 0.1;
+rho = ones(space_steps * time_steps, 1) + 0.1;
+lambda = ones(space_steps * time_steps, 1) + 0.1;
 q = sparse(space_steps * time_steps, 1);
 
 time = 1;
@@ -28,17 +28,20 @@ q = q * (1/h);
 
 trust_radius = 1;
 
-iters = 10;
+iters = 20;
 for i=1:iters
     b = -[get_GwL(m, rho, lambda); get_GlambdaL(m, rho)];
-    disp(norm(b)); % Quick and dirty way to check convergence.
+    disp(norm(b)/(space_steps*time_steps)); % Quick and dirty way to check convergence.
     Q = get_A();
     A = [get_A(), (get_D())'; zeros(space_steps * time_steps, space_steps * time_steps * 2), get_S()];
     solution = A\b;
-    alpha = line_search(solution);
-    m = m + alpha * solution(1 : space_steps * time_steps);
-    rho = rho + alpha * solution(space_steps * time_steps + 1 : space_steps * time_steps * 2);
-    lambda = lambda + alpha * solution(space_steps * time_steps * 2 + 1 : space_steps * time_steps * 3);
+    dm = solution(1 : space_steps * time_steps);
+    drho = solution(space_steps * time_steps + 1 : space_steps * time_steps * 2);
+    dlambda = solution(space_steps * time_steps * 2 + 1 : space_steps * time_steps * 3);
+    alpha = line_search(dm, drho, dlambda);
+    m = m + alpha * dm;
+    rho = rho + alpha * drho;
+    lambda = lambda + alpha * dlambda;
 end
 
 function D = get_derivative_matrix_time()
@@ -138,20 +141,20 @@ function GlambdaL = get_GlambdaL(m, rho)
     GlambdaL = get_D() * [m; rho] - q;
 end
 
-function alpha = line_search(solution)
-    global trust_radius
-    global space_steps
-    global time_steps
+function reward = reward(x, dm, drho, dlambda)
     global m
     global rho
     global lambda
+    b = -[get_GwL(m+x*dm, rho+x*drho, lambda+x*dlambda); get_GlambdaL(m+x*dm, rho+x*drho)];
+    reward = norm(b);
+end
+
+function alpha = line_search(dm, drho, dlambda)
+    global trust_radius
 
     a = -trust_radius;
     b = trust_radius;
-    dm = solution(1:space_steps*time_steps);
-    drho = solution(space_steps * time_steps + 1 : space_steps * time_steps * 2);
-    dlambda = solution(space_steps * time_steps * 2 + 1 : space_steps * time_steps * 3);
-    f = @(x) (norm(get_GwL(m+x*dm, rho+x*drho, lambda+x*dlambda))^2 + norm(get_GlambdaL(m+x*dm, rho+x*drho))^2);
+    f = @(x) reward(x, dm, drho, dlambda);
     gr = (1+sqrt(5))/2;
     
     c = b - (b - a)/gr;
@@ -168,4 +171,6 @@ function alpha = line_search(solution)
     end
     
     alpha = (a+b)/2;
+    fprintf("Alpha: %f\n", alpha)
+    fprintf("f(Alpha): %f\n", f(alpha));
 end
