@@ -2,3 +2,6 @@
 	path = xbraid
 	url = git@github.com:Torrencem/xbraid.git
 	branch = trimgrit_cxx
+[submodule "eigen"]
+	path = eigen
+	url = https://gitlab.com/libeigen/eigen.git
