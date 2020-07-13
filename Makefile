@@ -89,6 +89,8 @@ BRAID_DIR = ./xbraid/braid
 BRAID_FLAGS = -I$(BRAID_DIR)
 BRAID_LIB_FILE = $(BRAID_DIR)/libbraid.a
 
+EIGEN_DIR = ./eigen/
+
 .PHONY: all xbraid model_problem crowd clean
 
 .SUFFIXES:
@@ -136,6 +138,10 @@ model_problem_upwind: src/model_problem_upwind.c $(BRAID_LIB_FILE)
 model_problem_pp: src/model_problem.cpp $(BRAID_LIB_FILE)
 	@echo "Building" $@ "..."
 	$(MPICXX) $(CXXFLAGS) -L. -llapacke -llapack -lopenblas -lgfortran $(BRAID_FLAGS) -o model_problem_pp src/model_problem.cpp $(BRAID_LIB_FILE) $(LFLAGS) $(EXTRAFLAGS)
+
+crowd_horesh: src/crowd_horesh.cpp
+	@echo "Building" $@ "..."
+	$(MPICXX) $(CXXFLAGS) -o crowd_horesh src/crowd_horesh.cpp -I $(EIGEN_DIR) $(EXTRAFLAGS)
 
 clean:
 	rm -f *.out.*
