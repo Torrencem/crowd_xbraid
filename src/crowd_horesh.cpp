@@ -20,7 +20,8 @@ SparseMatrix<double> block_diag(const SparseMatrix<double> &diag, const int ncop
 }
 
 /// Compute the equivelent of [a; b] from matlab
-SparseMatrix<double> join(const SparseMatrix<double> &a, const SparseMatrix<double> &b) {
+SparseMatrix<double> jointb(const SparseMatrix<double> &a,
+                            const SparseMatrix<double> &b) {
     assert(a.cols() == b.cols());
     auto m2 = SparseMatrix<double> (a.rows() + b.rows(), a.cols());
     
@@ -35,6 +36,29 @@ SparseMatrix<double> join(const SparseMatrix<double> &a, const SparseMatrix<doub
     for (int k = 0; k < b.outerSize(); k++)
         for (SparseMatrix<double>::InnerIterator it(b, k); it; ++it) {
             m2.insert(it.row() + a.rows(), it.col())
+                = it.value();
+        }
+
+    return m2;
+}
+
+/// Compute the equivelent of [a, b] from matlab
+SparseMatrix<double> joinlr(const SparseMatrix<double> &a,
+                            const SparseMatrix<double> &b) {
+    assert(a.rows() == b.rows());
+    auto m2 = SparseMatrix<double> (a.rows(), a.cols() + b.cols());
+    
+    // For each non-zero entry in a
+    for (int k = 0; k < a.outerSize(); k++)
+        for (SparseMatrix<double>::InnerIterator it(a, k); it; ++it) {
+            m2.insert(it.row(), it.col())
+                = it.value();
+        }
+    
+    // For each non-zero entry in b
+    for (int k = 0; k < b.outerSize(); k++)
+        for (SparseMatrix<double>::InnerIterator it(b, k); it; ++it) {
+            m2.insert(it.row(), it.col() + a.cols())
                 = it.value();
         }
 
@@ -79,7 +103,10 @@ void test_join() {
     std::cout << m2 << std::endl;
 
     std::cout << "[M; M2] is:" << std::endl;
-    std::cout << join(m, m2) << std::endl;
+    std::cout << jointb(m, m2) << std::endl;
+    
+    std::cout << "[M, M2] is:" << std::endl;
+    std::cout << joinlr(m, m2) << std::endl;
 }
 
 int main() {
