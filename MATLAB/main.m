@@ -6,40 +6,57 @@ global rho
 global lambda
 global q
 global h
+global A_hat
+global D
+global S
 
 space_steps = 20;
 time_steps = 12;
-m = ones(space_steps * time_steps, 1) + 0.1;
-rho = ones(space_steps * time_steps, 1) + 0.1;
-lambda = ones(space_steps * time_steps, 1) + 0.1;
-q = sparse(space_steps * time_steps, 1);
+
+m = rand((space_steps + 1) * time_steps, 1) + 0.1;
+rho = rand(space_steps * (time_steps + 1), 1) + 0.1;
+lambda = rand(space_steps * (time_steps + 1), 1) + 0.1;
+q = sparse(space_steps * (time_steps + 1), 1);
 
 time = 1;
 h = time/time_steps;
 
 % Initial and final conditions
-q(1:space_steps/2) = ones(space_steps/2, 1);
-q(space_steps/2+1:space_steps) = ones(space_steps/2, 1) * 0.1;
-q(space_steps * (time_steps - 1) + 1 : space_steps * (time_steps - 1) + space_steps/2) = ones(space_steps/2, 1) * 0.1;
-q(space_steps * (time_steps-1) + 1 + space_steps/2 : space_steps * time_steps) = ones(space_steps/2, 1);
+q(1:space_steps/2) = zeros(space_steps/2, 1) + 0.1;
+q(1+space_steps/2:space_steps) = ones(space_steps/2, 1);
+q(space_steps * time_steps + 1 : space_steps * (time_steps + 1/2)) = ones(space_steps/2, 1);
+q(space_steps * (time_steps + 1/2) + 1 : space_steps * (time_steps + 1)) = zeros(space_steps/2, 1) + 0.1;
 
 q = q * (1/h);
 
 calc_fixed_matrices()
 
-iters = 20;
+iters = 5;
 for i=1:iters
     recalc_matrices()
+
+    A = [A_hat, D'; zeros(get_zero_matrix_size()), S];
     b = -[get_GwL(m, rho, lambda); get_GlambdaL(m, rho)];
     disp(norm(b)/(space_steps*time_steps)); % Quick and dirty way to check convergence.
     solution = A\b;
-    dm = solution(1 : space_steps * time_steps);
-    drho = solution(space_steps * time_steps + 1 : space_steps * time_steps * 2);
-    dlambda = solution(space_steps * time_steps * 2 + 1 : space_steps * time_steps * 3);
+
+    dm = solution(1 : (space_steps + 1) * time_steps);
+    drho = solution((space_steps + 1) * time_steps + 1 : (space_steps + 1) * time_steps + space_steps * (time_steps + 1));
+    dlambda = solution((space_steps + 1) * time_steps + space_steps * (time_steps + 1) + 1 : length(solution));
+
     alpha = line_search(dm, drho, dlambda);
+
     m = m + alpha * dm;
     rho = rho + alpha * drho;
     lambda = lambda + alpha * dlambda;
+end
+
+function dimens = get_zero_matrix_size()
+    global S
+    global A_hat
+    rows = size(S);
+    cols = size(A_hat);
+    dimens = [rows(1), cols(2)];
 end
 
 function calc_fixed_matrices()
@@ -56,30 +73,26 @@ function calc_fixed_matrices()
 end
 
 function recalc_matrices()
-    global space_steps
-    global time_steps
     global A_hat
-    global A
     global S
     global D
     A_hat = get_A_hat();
     S = -D / inv(A_hat) * D';
-    A = [A_hat, D'; zeros(space_steps * time_steps, space_steps * time_steps * 2), S];
 end
 
 function D = get_derivative_matrix_space()
     global space_steps
     global time_steps
     global h
-    D = sparse(space_steps, space_steps);
-    D(1, 1) = 1;
-    for i=2:space_steps
-        D(i, i) = 1;
-        D(i, i-1) = -1;
+    top_bottom = sparse(space_steps, (space_steps + 1) * time_steps);
+    interior_block = sparse(space_steps, space_steps + 1);
+    for i=1:space_steps
+        interior_block(i, i) = -1;
+        interior_block(i, i+1) = 1;
     end
+    interior_cell = repmat({interior_block}, 1, time_steps);
+    D = [top_bottom; blkdiag(interior_cell{:}); top_bottom];  
     D = (1/h) * D;
-    Drep = repmat({D}, 1, time_steps);
-    D = blkdiag(Drep{:});
 end
 
 
@@ -87,27 +100,33 @@ function D = get_derivative_matrix_time()
     global space_steps
     global time_steps
     global h
-    D = sparse(space_steps * time_steps, space_steps * time_steps);
-    for j=1:space_steps
-        D(j, j) = 1;
+    top = sparse(space_steps, space_steps * (time_steps + 1));
+    bottom = sparse(space_steps, space_steps * (time_steps + 1));
+    for i=1:space_steps
+        top(i, i) = 1;
+        bottom(i, space_steps * (time_steps + 1) - i + 1) = 1;
     end
-    for i=2:time_steps
+    
+    center = sparse(space_steps * time_steps, space_steps * (time_steps + 1));
+    for i=1:time_steps
         for j=1:space_steps
-            D(space_steps * (i-1) + j, space_steps * (i-1) + j) = 1;
-            D(space_steps * (i-1) + j, space_steps * (i-2) + j) = -1;
+            center((i-1) * space_steps + j, (i-1) * space_steps + j) = -1;
+            center((i-1) * space_steps + j, i * space_steps + j) = -1;
         end
     end
+    
+    D = [top; center; bottom];
+    
     D = (1/h) * D;
 end
 
 function As = get_As()
     global space_steps
     global time_steps
-    As = sparse(space_steps, space_steps);
-    As(1, 1) = 1;
-    for i=2:space_steps
+    As = sparse(space_steps, space_steps + 1);
+    for i=1:space_steps
         As(i, i) = 1/2;
-        As(i, i-1) = 1/2; 
+        As(i, i+1) = 1/2; 
     end
     Asrep = repmat({As}, 1, time_steps);
     As = blkdiag(Asrep{:});
@@ -116,7 +135,7 @@ end
 function At = get_At()
     global space_steps
     global time_steps
-    At = sparse(space_steps * time_steps, space_steps * time_steps);
+    At = sparse((space_steps + 1) * time_steps, space_steps * time_steps);
     for j=1:space_steps
         At(j, j) = 1/2;
     end
@@ -165,8 +184,7 @@ end
 
 function alpha = line_search(dm, drho, dlambda)
     f = @(x) reward(x, dm, drho, dlambda);
-    options = optimoptions(@fminunc,'Display','none');
-    alpha = fminunc(f,0,options); 
+    alpha = fminbnd(f,-2,2); 
 %     global trust_radius
 % 
 %     a = -trust_radius;
