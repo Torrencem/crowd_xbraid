@@ -136,7 +136,7 @@ Sparse get_derivative_matrix_time(int mspace, int ntime, double h) {
     for (int i = 0; i < ntime; i++) {
         for (int j = 0; j < mspace; j++) {
             center.insert((i - 1) * mspace + j, (i - 1) * mspace + j) = -1.0;
-            center.insert((i - 1) * mspace + j, i * mspace + j) = -1.0;
+            center.insert((i - 1) * mspace + j, i * mspace + j) = 1.0;
         }
     }
 
