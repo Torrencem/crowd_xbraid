@@ -15,8 +15,8 @@ time_steps = 12;
 
 m = rand((space_steps + 1) * time_steps, 1) + 0.1;
 rho = rand(space_steps * (time_steps + 1), 1) + 0.1;
-lambda = rand(space_steps * (time_steps + 1), 1) + 0.1;
-q = sparse(space_steps * (time_steps + 1), 1);
+lambda = rand(space_steps * (time_steps + 2), 1) + 0.1;
+q = sparse(space_steps * (time_steps + 2), 1);
 
 time = 1;
 h = time/time_steps;
@@ -135,14 +135,11 @@ end
 function At = get_At()
     global space_steps
     global time_steps
-    At = sparse((space_steps + 1) * time_steps, space_steps * time_steps);
-    for j=1:space_steps
-        At(j, j) = 1/2;
-    end
-    for i=2:time_steps
+    At = sparse(space_steps * time_steps, space_steps * (time_steps + 1));
+    for i=1:time_steps
         for j=1:space_steps
             At(space_steps * (i-1) + j, space_steps * (i-1) + j) = 1/2;
-            At(space_steps * (i-1) + j, space_steps * (i-2) + j) = 1/2;
+            At(space_steps * (i-1) + j, space_steps * (i) + j) = 1/2;
         end
     end
 end
