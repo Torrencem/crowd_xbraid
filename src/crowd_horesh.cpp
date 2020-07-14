@@ -86,44 +86,115 @@ void test_block_diag() {
 }
 
 Sparse get_As(int mspace, int ntime) {
-    Sparse As(mspace, mspace);
+    Sparse As(mspace, mspace + 1);
     As.insert(0, 0) = 1.0;
 
     for (int i = 1; i < mspace; i++) {
         As.insert(i, i) = 0.5;
-        As.insert(i, i - 1) = 0.5;
+        As.insert(i, i + 1) = 0.5;
     }
     return block_diag(As, ntime);
 }
 
 Sparse get_At(int mspace, int ntime) {
-    Sparse At(mspace * ntime, mspace * ntime);
-
-    for (int i = 0; i < mspace; i++) {
-        At.insert(i, i) = 0.5;
-    }
+    Sparse At(mspace * ntime, mspace * (ntime + 1));
 
     for (int i = 1; i < ntime; i++) {
         for (int j = 0; j < mspace; j++) {
             At.insert(mspace * (i - 1) + j, mspace * (i - 1) + j) = 0.5;
-            At.insert(mspace * (i - 1) + j, mspace * (i - 2) + j) = 0.5;
+            At.insert(mspace * (i - 1) + j, mspace * i + j) = 0.5;
         }
     }
 
     return At;
 }
 
+Sparse get_derivative_matrix_space(int mspace, int ntime, double h) {
+    Sparse top_bottom (mspace, (mspace + 1) * ntime);
+    // TODO
+    Sparse top_bottom2 (mspace, (mspace + 1) * ntime);
+    Sparse interior_block (mspace, mspace + 1);
+    for (int i = 0; i < mspace; i++) {
+        interior_block.insert(i, i) = -1.0;
+        interior_block.insert(i, i + 1) = 1.0;
+    }
+    Sparse interior_cell = block_diag(interior_block, ntime);
+    Sparse D = jointb(top_bottom, jointb(interior_cell, top_bottom2));
+    D /= h;
+    return D;
+}
+
+Sparse get_derivative_matrix_time(int mspace, int ntime, double h) {
+    Sparse top (mspace, mspace * (ntime + 1));
+    Sparse bottom (mspace, mspace * (ntime + 1));
+    for (int i = 0; i < mspace; i++) {
+        top.insert(i, i) = 1.0;
+        bottom.insert(i, mspace * (ntime + 1) - i + 1) = 1.0;
+    }
+
+    Sparse center (mspace * ntime, mspace * (ntime + 1));
+    for (int i = 0; i < ntime; i++) {
+        for (int j = 0; j < mspace; j++) {
+            center.insert((i - 1) * mspace + j, (i - 1) * mspace + j) = -1.0;
+            center.insert((i - 1) * mspace + j, i * mspace + j) = -1.0;
+        }
+    }
+
+    Sparse D = jointb(top, jointb(center, bottom));
+    D /= h;
+
+    return D;
+}
+
 void calc_fixed_matrices(int mspace,
         int ntime,
+        double h,
         Sparse &D,
         Sparse &D1,
         Sparse &D2,
         Sparse &As,
         Sparse &At) {
-    // TODO: D1 and D2 matrices
+    D1 = get_derivative_matrix_space(mspace, ntime, h);
+    D2 = get_derivative_matrix_time(mspace, ntime, h);
     D = joinlr(D1, D2);
     As = get_As(mspace, ntime);
     At = get_At(mspace, ntime);
+}
+
+Sparse get_A_hat(Sparse &rho, Sparse &m, Sparse &As, Sparse &At) {
+    Vector vec_1 = 2 * As.transpose() * At * rho.cwiseInverse();
+    Vector vec_2 = 2 * At.transpose() * As * (m.cwiseProduct(m));
+    Vector vec_3 = (rho.cwiseProduct(rho.cwiseProduct(rho))).cwiseInverse();
+    int dim = vec_1.rows() + vec_2.rows();
+    Sparse A (dim, dim);
+    for (int i = 0; i < vec_1.rows(); i++) {
+        A.insert(i, i) = vec_1[i];
+    }
+    for (int i = 0; i < vec_2.rows(); i++) {
+        A.insert(i + vec_1.rows(), i + vec_1.rows()) = vec_2[i] + vec_3[i];
+    }
+    return A;
+}
+
+Sparse get_GwL(Sparse &m,
+        Sparse &rho,
+        Sparse &lambda,
+        Sparse &As,
+        Sparse &At,
+        Sparse &D1,
+        Sparse &D2) {
+    Sparse diag_m (m.rows(), m.rows());
+    for (int i = 0; i < m.rows(); i++) {
+        diag_m.insert(i, i) = m.coeff(i, 0);
+    }
+    Sparse diag_rho (rho.rows(), rho.rows());
+    for (int i = 0; i < rho.rows(); i++) {
+        double value = rho.coeff(i, 0);
+        diag_rho.insert(i, i) = 1.0 / value / value;
+    }
+    Sparse GmM = 2 * diag_m * As.transpose() * At * rho.cwiseInverse() * D1.transpose() * lambda;
+    Sparse GmRho = - diag_rho * At.transpose() * As * m.cwiseProduct(m) + D2.transpose() * lambda;
+    return jointb(GmM, GmRho);
 }
 
 void test_join() {
@@ -186,40 +257,41 @@ int main() {
     test_min();
     exit(0);
     int mspace = 20;
+
+    assert(mspace % 2 == 0);
+
+
     int ntime = 12;
-    
-    int rho_size = mspace * ntime;
-    int lambda_size = mspace * (ntime + 1);
 
-    Vector m(rho_size);
-    Vector rho(rho_size);
-    Vector lambda(lambda_size);
-    m.setConstant(1.1);
-    rho.setConstant(1.1);
-    lambda.setConstant(1.1);
-    Sparse q(lambda_size, 1);
+    Vector m((mspace + 1) * ntime);
+    Vector rho(mspace * (ntime + 1));
+    Vector lambda(mspace * (ntime + 2));
+    m.setConstant(0.5);
+    rho.setConstant(0.5);
+    lambda.setConstant(0.5);
+    Sparse q(mspace * (ntime + 2), 1);
 
-    int time = 1;
+    double time = 1.0;
     int iters = 20;
 
     double h = time / ntime;
 
     for (int i = 0; i < mspace / 2; i++) {
-        q.insert(i, 0) = 1.0;
+        q.insert(i, 0) = 0.1;
     }
     for (int i = mspace / 2; i < mspace; i++) {
-        q.insert(i, 0) = 0.1;
-    }
-    for (int i = mspace * (ntime - 1); i < mspace * (ntime - 1) + mspace / 2; i++) {
-        q.insert(i, 0) = 0.1;
-    }
-    for (int i = mspace * (ntime - 1) + mspace / 2; i < mspace * ntime; i++) {
         q.insert(i, 0) = 1.0;
+    }
+    for (int i = mspace * (ntime + 1); i < mspace / 2 * (ntime * 2 + 3); i++) {
+        q.insert(i, 0) = 1.0;
+    }
+    for (int i = mspace / 2 * (ntime * 2 + 3); i < mspace * (ntime + 2); i++) {
+        q.insert(i, 0) = 0.1;
     }
 
     q /= h;
     
     Sparse D, D1, D2, As, At;
 
-    calc_fixed_matrices(mspace, ntime, D, D1, D2, As, At);
+    calc_fixed_matrices(mspace, ntime, h, D, D1, D2, As, At);
 }
