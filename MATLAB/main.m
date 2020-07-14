@@ -24,8 +24,8 @@ h = time/time_steps;
 % Initial and final conditions
 q(1:space_steps/2) = zeros(space_steps/2, 1) + 0.1;
 q(1+space_steps/2:space_steps) = ones(space_steps/2, 1);
-q(space_steps * time_steps + 1 : space_steps * (time_steps + 1/2)) = ones(space_steps/2, 1);
-q(space_steps * (time_steps + 1/2) + 1 : space_steps * (time_steps + 1)) = zeros(space_steps/2, 1) + 0.1;
+q(space_steps * (time_steps + 1)+ 1 : space_steps * (time_steps + 3/2)) = ones(space_steps/2, 1);
+q(space_steps * (time_steps + 3/2) + 1 : space_steps * (time_steps + 2)) = zeros(space_steps/2, 1) + 0.1;
 
 q = q * (1/h);
 
