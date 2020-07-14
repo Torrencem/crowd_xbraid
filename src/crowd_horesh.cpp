@@ -161,9 +161,9 @@ void calc_fixed_matrices(int mspace,
     At = get_At(mspace, ntime);
 }
 
-Sparse get_A_hat(Sparse &rho, Sparse &m, Sparse &As, Sparse &At) {
-    Vector vec_1 = 2 * As.transpose() * At * rho.cwiseInverse();
-    Vector vec_2 = 2 * At.transpose() * As * (m.cwiseProduct(m));
+Sparse get_A_hat(Vector &rho, Sparse &m, Sparse &As, Sparse &At) {
+    Vector vec_1 = 2 * As.adjoint() * At * rho.cwiseInverse();
+    Vector vec_2 = 2 * At.adjoint() * As * (m.cwiseProduct(m));
     Vector vec_3 = (rho.cwiseProduct(rho.cwiseProduct(rho))).cwiseInverse();
     int dim = vec_1.rows() + vec_2.rows();
     Sparse A (dim, dim);
@@ -177,23 +177,21 @@ Sparse get_A_hat(Sparse &rho, Sparse &m, Sparse &As, Sparse &At) {
 }
 
 Sparse get_GwL(Sparse &m,
-        Sparse &rho,
+        Vector &rho,
         Sparse &lambda,
         Sparse &As,
         Sparse &At,
         Sparse &D1,
         Sparse &D2) {
-    Sparse diag_m (m.rows(), m.rows());
-    for (int i = 0; i < m.rows(); i++) {
-        diag_m.insert(i, i) = m.coeff(i, 0);
-    }
-    Sparse diag_rho (rho.rows(), rho.rows());
-    for (int i = 0; i < rho.rows(); i++) {
-        double value = rho.coeff(i, 0);
-        diag_rho.insert(i, i) = 1.0 / value / value;
-    }
-    Sparse GmM = 2 * diag_m * As.transpose() * At * rho.cwiseInverse() * D1.transpose() * lambda;
-    Sparse GmRho = - diag_rho * At.transpose() * As * m.cwiseProduct(m) + D2.transpose() * lambda;
+    Sparse GmM = 2 * m.diagonal() * As.adjoint() * At * rho.cwiseInverse() * D1.adjoint() * lambda;
+    Sparse GmRho =
+        rho.cwiseInverse()
+           .array()
+           .square()
+           .eval()
+           .matrix()
+           .asDiagonal()
+           * (- At.adjoint()) * As * m.cwiseProduct(m) + D2.adjoint() * lambda;
     return jointb(GmM, GmRho);
 }
 
