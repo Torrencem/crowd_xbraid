@@ -111,7 +111,7 @@ function D = get_derivative_matrix_time()
     for i=1:time_steps
         for j=1:space_steps
             center((i-1) * space_steps + j, (i-1) * space_steps + j) = -1;
-            center((i-1) * space_steps + j, i * space_steps + j) = -1;
+            center((i-1) * space_steps + j, i * space_steps + j) = 1;
         end
     end
     
