@@ -10,8 +10,8 @@ global A_hat
 global D
 global S
 
-space_steps = 20;
-time_steps = 12;
+space_steps = 10;
+time_steps = 10;
 
 m = rand((space_steps + 1) * time_steps, 1) + 0.1;
 rho = rand(space_steps * (time_steps + 1), 1) + 0.1;
@@ -31,7 +31,7 @@ q = q * (1/h);
 
 calc_fixed_matrices()
 
-iters = 5;
+iters = 10;
 for i=1:iters
     recalc_matrices()
 
@@ -104,7 +104,7 @@ function D = get_derivative_matrix_time()
     bottom = sparse(space_steps, space_steps * (time_steps + 1));
     for i=1:space_steps
         top(i, i) = 1;
-        bottom(i, space_steps * (time_steps + 1) - i + 1) = 1;
+        bottom(i, space_steps * time_steps + i) = 1;
     end
     
     center = sparse(space_steps * time_steps, space_steps * (time_steps + 1));
@@ -160,9 +160,9 @@ function GwL = get_GwL(m, rho, lambda)
     global At
     global D1
     global D2
-    GmM = 2 * diag(m) * As' * At * (1./rho) + D1' * lambda;
-    GmRho = -diag(1./(rho.^2)) * At' * As * (m.^2) + D2' * lambda;
-    GwL = [GmM; GmRho];
+    GmL = 2 * diag(m) * As' * At * (1./rho) + D1' * lambda;
+    GrhoL = -diag(1./(rho.^2)) * At' * As * (m.^2) + D2' * lambda;
+    GwL = [GmL; GrhoL];
 end
 
 function GlambdaL = get_GlambdaL(m, rho)
@@ -176,16 +176,18 @@ function reward = reward(x, dm, drho, dlambda)
     global rho
     global lambda
     b = -[get_GwL(m+x*dm, rho+x*drho, lambda+x*dlambda); get_GlambdaL(m+x*dm, rho+x*drho)];
-    reward = norm(b);
+    reward = norm(b)^2;
 end
 
 function alpha = line_search(dm, drho, dlambda)
     f = @(x) reward(x, dm, drho, dlambda);
-    alpha = fminbnd(f,-2,2); 
+    options = optimoptions(@fminunc, 'Display', 'none');
+    alpha = fminunc(f, 0, options); 
 %     global trust_radius
 % 
 %     a = -trust_radius;
 %     b = trust_radius;
+
 %     f = @(x) reward(x, dm, drho, dlambda);
 %     gr = (1+sqrt(5))/2;
 %     
