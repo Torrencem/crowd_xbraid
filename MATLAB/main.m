@@ -1,3 +1,6 @@
+clc
+clear
+
 % Using only one spatial dimension for simplicity, like we will in TriMGRIT
 global space_steps
 global time_steps
@@ -13,19 +16,21 @@ global S
 space_steps = 10;
 time_steps = 10;
 
-m = rand((space_steps + 1) * time_steps, 1) + 0.1;
-rho = rand(space_steps * (time_steps + 1), 1) + 0.1;
-lambda = rand(space_steps * (time_steps + 2), 1) + 0.1;
-q = sparse(space_steps * (time_steps + 2), 1);
+m = ones((space_steps + 1) * time_steps, 1) * 0.1;
+rho = ones(space_steps * (time_steps + 1), 1) + 5;
+lambda = ones(space_steps * (time_steps + 2), 1) * 0.1;
+q = zeros(space_steps * (time_steps + 2), 1);
 
 time = 1;
 h = time/time_steps;
 
 % Initial and final conditions
-q(1:space_steps/2) = zeros(space_steps/2, 1) + 0.1;
-q(1+space_steps/2:space_steps) = ones(space_steps/2, 1);
-q(space_steps * (time_steps + 1)+ 1 : space_steps * (time_steps + 3/2)) = ones(space_steps/2, 1);
-q(space_steps * (time_steps + 3/2) + 1 : space_steps * (time_steps + 2)) = zeros(space_steps/2, 1) + 0.1;
+%q(1+space_steps/2:space_steps) = ones(space_steps/2, 1);
+%q(space_steps * (time_steps + 1)+ 1 : space_steps * (time_steps + 3/2)) = ones(space_steps/2, 1);
+%q(space_steps * (time_steps + 3/2) + 1 : space_steps * (time_steps + 2)) = zeros(space_steps/2, 1) + 0.1;
+
+q(1:space_steps) = ones(space_steps, 1)*0.5;
+q(space_steps * (time_steps + 1) + 1: space_steps * (time_steps + 2)) = ones(space_steps, 1)*0.5;
 
 q = q * (1/h);
 
