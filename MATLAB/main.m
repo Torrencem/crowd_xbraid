@@ -17,7 +17,7 @@ space_steps = 10;
 time_steps = 10;
 
 m = ones((space_steps + 1) * time_steps, 1) * 0.1;
-rho = ones(space_steps * (time_steps + 1), 1) + 5;
+rho = ones(space_steps * (time_steps + 1), 1) * 0.5;
 lambda = ones(space_steps * (time_steps + 2), 1) * 0.1;
 q = zeros(space_steps * (time_steps + 2), 1);
 
