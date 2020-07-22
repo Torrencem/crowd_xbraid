@@ -30,7 +30,7 @@ h = time/time_steps;
 %q(space_steps * (time_steps + 3/2) + 1 : space_steps * (time_steps + 2)) = zeros(space_steps/2, 1) + 0.1;
 
 q(1:space_steps) = ones(space_steps, 1)*0.5;
-q(space_steps * (time_steps + 1) + 1: space_steps * (time_steps + 2)) = ones(space_steps, 1)*0.5;
+q(space_steps * (time_steps + 1) + 1: space_steps * (time_steps + 2)) = ones(space_steps, 1)*0.5*-1;
 
 q = q * (1/h);
 
@@ -55,6 +55,14 @@ for i=1:iters
     rho = rho + alpha * drho;
     lambda = lambda + alpha * dlambda;
 end
+rho_reshaped = reshape(rho, [time_steps + 1, space_steps]);
+[X, Y] = meshgrid(1/10:1/10:1, 0:1/10:1);
+surf(X, Y, rho_reshaped)
+
+global D1
+global D2
+global As
+global At
 
 function dimens = get_zero_matrix_size()
     global S
@@ -109,7 +117,7 @@ function D = get_derivative_matrix_time()
     bottom = sparse(space_steps, space_steps * (time_steps + 1));
     for i=1:space_steps
         top(i, i) = 1;
-        bottom(i, space_steps * time_steps + i) = 1;
+        bottom(i, space_steps * time_steps + i) = -1;
     end
     
     center = sparse(space_steps * time_steps, space_steps * (time_steps + 1));
