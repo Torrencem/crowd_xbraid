@@ -13,8 +13,8 @@ global A_hat
 global D
 global S
 
-space_steps = 20;
-time_steps = 20;
+space_steps = 45;
+time_steps = 45;
 
 m = ones((space_steps + 1) * time_steps, 1) * 0.1;
 rho = ones(space_steps * (time_steps + 1), 1) * 0.5;
@@ -30,13 +30,13 @@ h = time/time_steps;
 %q(space_steps * (time_steps + 3/2) + 1 : space_steps * (time_steps + 2)) = zeros(space_steps/2, 1) + 0.1;
 
 q(1:space_steps) = ones(space_steps, 1)*0.5;
-q(space_steps * (time_steps + 1) + 1: space_steps * (time_steps + 2)) = ones(space_steps, 1)*0.5*-1;
+q(space_steps * (time_steps + 1) + 1: space_steps * (time_steps + 2)) = -1 * (ones(space_steps, 1)*0.5 + sin((0:1/(space_steps-1):1) * 2*pi)'*0.5 );
 
 q = q * (1/h);
 
 calc_fixed_matrices()
 
-iters = 10;
+iters = 5;
 for i=1:iters
     recalc_matrices()
 
@@ -56,7 +56,7 @@ for i=1:iters
     lambda = lambda + alpha * dlambda;
 end
 rho_reshaped = reshape(rho, [space_steps, time_steps + 1]);
-[X, Y] = meshgrid(0/20:1/20:1, 1/20:1/20:1);
+[X, Y] = meshgrid(0:1/time_steps:1, 1/space_steps:1/space_steps:1);
 surf(X, Y, rho_reshaped)
 
 global D1
