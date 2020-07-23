@@ -90,7 +90,7 @@ function recalc_matrices()
     global S
     global D
     A_hat = get_A_hat();
-    S = -D / inv(A_hat) * D';
+    S = -D / A_hat * D';
 end
 
 function D = get_derivative_matrix_space()
