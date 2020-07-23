@@ -1,5 +1,6 @@
 #include <iostream>
 #include <Eigen/Sparse>
+#include <Eigen/SparseCholesky>
 
 using Eigen::SparseMatrix;
 using Eigen::MatrixXd;
@@ -161,7 +162,7 @@ void calc_fixed_matrices(int mspace,
     At = get_At(mspace, ntime);
 }
 
-Sparse get_A_hat(Vector &rho, Sparse &m, Sparse &As, Sparse &At) {
+Sparse get_A_hat(Vector &rho, Vector &m, Sparse &As, Sparse &At) {
     Vector vec_1 = 2 * As.adjoint() * At * rho.cwiseInverse();
     Vector vec_2 = 2 * At.adjoint() * As * (m.cwiseProduct(m));
     Vector vec_3 = (rho.cwiseProduct(rho.cwiseProduct(rho))).cwiseInverse();
@@ -176,15 +177,15 @@ Sparse get_A_hat(Vector &rho, Sparse &m, Sparse &As, Sparse &At) {
     return A;
 }
 
-Sparse get_GwL(Sparse &m,
+Vector get_GwL(Vector &m,
         Vector &rho,
-        Sparse &lambda,
+        Vector &lambda,
         Sparse &As,
         Sparse &At,
         Sparse &D1,
         Sparse &D2) {
-    Sparse GmM = 2 * m.diagonal() * As.adjoint() * At * rho.cwiseInverse() * D1.adjoint() * lambda;
-    Sparse GmRho =
+    Vector GmM = 2 * m.diagonal() * As.adjoint() * At * rho.cwiseInverse() * D1.adjoint() * lambda;
+    Vector GmRho =
         rho.cwiseInverse()
            .array()
            .square()
@@ -192,7 +193,33 @@ Sparse get_GwL(Sparse &m,
            .matrix()
            .asDiagonal()
            * (- At.adjoint()) * As * m.cwiseProduct(m) + D2.adjoint() * lambda;
-    return jointb(GmM, GmRho);
+    Vector result (GmM.size() + GmRho.size());
+    for (int i = 0; i < GmM.size() + GmRho.size(); i++) {
+        if (i >= GmM.size()) {
+            result[i] = GmRho[i - GmM.size()];
+        } else {
+            result[i] = GmM[i];
+        }
+    }
+    return result;
+}
+
+Vector get_GlambdaL(Vector &m, Vector &rho, Vector &q, Sparse &D) {
+    Vector x (m.size() + rho.size());
+    for (int i = 0; i < m.size() + rho.size(); i++) {
+        if (i >= m.size()) {
+            x[i] = rho[i - m.size()];
+        } else {
+            x[i] = m[i];
+        }
+    }
+    return D * x - q;
+}
+
+Sparse get_zero_matrix(Sparse &S, Sparse &A_hat) {
+    Sparse result(S.rows(), A_hat.cols());
+
+    return result;
 }
 
 void test_join() {
@@ -243,6 +270,31 @@ double minarg(F f, double a, double b, double tol = 1e-5) {
     return (b + a) / 2;
 }
 
+double reward(double x, Vector &dm, Vector &drho, Vector &dlambda, Vector &m, Vector &rho, Vector &lambda, Sparse &As, Sparse &At, Sparse &D1, Sparse &D2, Vector &q, Sparse &D) {
+    Vector m2 = m + x*dm;
+    Vector rho2 = rho + x * drho;
+    Vector lambda2 = lambda + x * dlambda;
+    Vector GwL = get_GwL(m2, rho2, lambda2, As, At, D1, D2);
+    Vector GlambdaL = get_GlambdaL(m2, rho2, q, D);
+    Vector b(GwL.size() + GlambdaL.size());
+    for (int i = 0; i < GwL.size() + GlambdaL.size(); i++) {
+        if (i >= GwL.size()) {
+            b[i] = GlambdaL[i - GwL.size()];
+        } else {
+            b[i] = GwL[i];
+        }
+    }
+    return b.squaredNorm();
+}
+
+double line_search(Vector &dm, Vector &drho, Vector &dlambda, Vector &m, Vector &rho, Vector &lambda, Sparse &As, Sparse &At, Sparse &D1, Sparse &D2, Vector &q, Sparse &D) {
+    auto f = [&](double x) {
+        return reward(x, dm, drho, dlambda, m, rho, lambda, As, At, D1, D2, q, D);
+    };
+    // TODO: 100? really??
+    return minarg(f, 0, 100.0);
+}
+
 void test_min() {
     auto square = [](double x) { return (x - 1.5) * (x - 1.5); };
     double min = minarg(square, -10.0, 10.0, 1e-6);
@@ -252,44 +304,120 @@ void test_min() {
 int main() {
     // test_block_diag();
     // test_join();
-    test_min();
-    exit(0);
-    int mspace = 20;
+    // test_min();
+    // exit(0);
+    int mspace = 45;
 
-    assert(mspace % 2 == 0);
+    // assert(mspace % 2 == 0);
 
-
-    int ntime = 12;
+    int ntime = 45;
 
     Vector m((mspace + 1) * ntime);
     Vector rho(mspace * (ntime + 1));
     Vector lambda(mspace * (ntime + 2));
-    m.setConstant(0.5);
+    m.setConstant(0.1);
     rho.setConstant(0.5);
-    lambda.setConstant(0.5);
-    Sparse q(mspace * (ntime + 2), 1);
+    lambda.setConstant(0.1);
+    Vector q(mspace * (ntime + 2), 1);
 
     double time = 1.0;
-    int iters = 20;
+    int iters = 5;
 
     double h = time / ntime;
 
-    for (int i = 0; i < mspace / 2; i++) {
-        q.insert(i, 0) = 0.1;
+    // for (int i = 0; i < mspace / 2; i++) {
+    //     q.insert(i, 0) = 0.1;
+    // }
+    // for (int i = mspace / 2; i < mspace; i++) {
+    //     q.insert(i, 0) = 1.0;
+    // }
+    // for (int i = mspace * (ntime + 1); i < mspace / 2 * (ntime * 2 + 3); i++) {
+    //     q.insert(i, 0) = 1.0;
+    // }
+    // for (int i = mspace / 2 * (ntime * 2 + 3); i < mspace * (ntime + 2); i++) {
+    //     q.insert(i, 0) = 0.1;
+    // }
+
+    for (int i = 0; i < mspace; i++) {
+        q[i] = 0.5;
     }
-    for (int i = mspace / 2; i < mspace; i++) {
-        q.insert(i, 0) = 1.0;
-    }
-    for (int i = mspace * (ntime + 1); i < mspace / 2 * (ntime * 2 + 3); i++) {
-        q.insert(i, 0) = 1.0;
-    }
-    for (int i = mspace / 2 * (ntime * 2 + 3); i < mspace * (ntime + 2); i++) {
-        q.insert(i, 0) = 0.1;
+    int counter = 0;
+    double acc = 0.0;
+    for (int i = mspace * (ntime + 1); i < mspace * (ntime + 2); i++) {
+        if (counter >= mspace) {
+            q[i] = -acc * 2 * 3.141593 * 0.5;
+            acc += 1.0 / (mspace - 1);
+        } else {
+            // Initial t=0 conditions
+            q[i] = -0.5;
+        }
+        counter++;
     }
 
     q /= h;
     
-    Sparse D, D1, D2, As, At;
+    Sparse D, D1, D2, A, As, At, A_hat, S;
 
     calc_fixed_matrices(mspace, ntime, h, D, D1, D2, As, At);
+
+    for (int i = 0; i < iters; i++) {
+        A_hat = get_A_hat(rho, m, As, At);
+        S = -D * A_hat.adjoint() * D.transpose();
+
+        A = jointb(joinlr(A_hat, D.transpose()), joinlr(get_zero_matrix(S, A_hat), S));
+        
+        Vector GwL = get_GwL(m, rho, lambda, As, At, D1, D2);
+        Vector GlambdaL = get_GlambdaL(m, rho, q, D);
+        Vector b(GwL.size() + GlambdaL.size());
+        for (int i = 0; i < GwL.size() + GlambdaL.size(); i++) {
+            if (i >= GwL.size()) {
+                b[i] = GlambdaL[i - GwL.size()];
+            } else {
+                b[i] = GwL[i];
+            }
+        }
+        
+        // Solve A(solution) = b
+        Eigen::SimplicialLLT<Sparse> solver;
+        solver.compute(A);
+        if (solver.info() != Eigen::Success) {
+            exit(1);
+        }
+        Vector solution = solver.solve(b);
+        if (solver.info() != Eigen::Success) {
+            exit(1);
+        }
+        
+        Eigen::Map<Vector> dm(solution.data(), (mspace + 1) * ntime);
+        int start = (mspace + 1) * ntime;
+        int len = mspace * (ntime + 1);
+        Eigen::Map<Vector> drho(solution.data() + start, len);
+        start += len;
+        len = solution.size() - start;
+        Eigen::Map<Vector> dlambda(solution.data() + start, len);
+
+        Vector dm_(dm);
+        Vector drho_(drho);
+        Vector dlambda_(dlambda);
+
+        double alpha = line_search(dm_, drho_, dlambda_, m, rho, lambda, As, At, D1, D2, q, D);
+
+        m += alpha * dm;
+        rho += alpha * drho;
+        lambda += alpha * dlambda;
+    }
+
+    rho.resize(mspace, ntime + 1);
+
+    for (int x = 0; x < ntime; x++) {
+        for (int y = 0; y < mspace; y++) {
+            std::cout 
+                << x / ntime 
+                << ", " 
+                << y / mspace 
+                << ": " 
+                << rho.coeff(y, x)
+                << std::endl;
+        }
+    }
 }
