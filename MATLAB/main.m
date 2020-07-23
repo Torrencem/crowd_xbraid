@@ -13,8 +13,8 @@ global A_hat
 global D
 global S
 
-space_steps = 10;
-time_steps = 10;
+space_steps = 20;
+time_steps = 20;
 
 m = ones((space_steps + 1) * time_steps, 1) * 0.1;
 rho = ones(space_steps * (time_steps + 1), 1) * 0.5;
@@ -55,8 +55,8 @@ for i=1:iters
     rho = rho + alpha * drho;
     lambda = lambda + alpha * dlambda;
 end
-rho_reshaped = reshape(rho, [time_steps + 1, space_steps]);
-[X, Y] = meshgrid(1/10:1/10:1, 0:1/10:1);
+rho_reshaped = reshape(rho, [space_steps, time_steps + 1]);
+[X, Y] = meshgrid(0/20:1/20:1, 1/20:1/20:1);
 surf(X, Y, rho_reshaped)
 
 global D1
