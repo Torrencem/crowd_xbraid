@@ -13,13 +13,14 @@ global A_hat
 global D
 global S
 global At
+global preconditioner
 
-space_steps = 45;
-time_steps = 45;
+space_steps = 20;
+time_steps = 48;
 
-m = ones((space_steps + 1) * time_steps, 1) * 0.1;
+m = rand((space_steps + 1) * time_steps, 1) * 0.1;
 rho = ones(space_steps * (time_steps + 1), 1) * 0.5;
-lambda = ones(space_steps * (time_steps + 2), 1) * 0.1;
+lambda = rand(space_steps * (time_steps + 2), 1) * 0.1;
 q = zeros(space_steps * (time_steps + 2), 1);
 
 time = 1;
@@ -37,12 +38,12 @@ q = q * (1/h);
 
 calc_fixed_matrices()
 
-iters = 5;
+iters = 15;
 for i=1:iters
     recalc_matrices()
 
     A = [A_hat, D'; zeros(get_zero_matrix_size()), S];
-    b = -[get_GwL(m, rho, lambda); get_GlambdaL(m, rho)];
+    b = -preconditioner * [get_GwL(m, rho, lambda); get_GlambdaL(m, rho)];
     disp(norm(b)/(space_steps*time_steps)); % Quick and dirty way to check convergence.
     solution = A\b;
 
@@ -56,6 +57,7 @@ for i=1:iters
     rho = rho + alpha * drho;
     lambda = lambda + alpha * dlambda;
 end
+
 rho_reshaped = reshape(At * rho, [space_steps, time_steps]);
 [X, Y] = meshgrid(1/time_steps:1/time_steps:1, 1/space_steps:1/space_steps:1);
 surf(X, Y, rho_reshaped)
@@ -85,8 +87,11 @@ function recalc_matrices()
     global A_hat
     global S
     global D
+    global preconditioner
     A_hat = get_A_hat();
     S = -D / A_hat * D';
+    dim_D = size(D);
+    preconditioner = [eye(dim_D(2)), zeros([dim_D(2), dim_D(1)]); -D/A_hat, eye(dim_D(1))];
 end
 
 function D = get_derivative_matrix_space()
@@ -184,6 +189,7 @@ function reward = reward(x, dm, drho, dlambda)
     global m
     global rho
     global lambda
+    global preconditioner
     b = -[get_GwL(m+x*dm, rho+x*drho, lambda+x*dlambda); get_GlambdaL(m+x*dm, rho+x*drho)];
     reward = norm(b)^2;
 end
