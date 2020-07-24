@@ -108,9 +108,8 @@ void test_block_diag() {
 
 Sparse get_As(int mspace, int ntime) {
     Sparse As(mspace, mspace + 1);
-    As.insert(0, 0) = 1.0;
 
-    for (int i = 1; i < mspace; i++) {
+    for (int i = 0; i < mspace; i++) {
         As.insert(i, i) = 0.5;
         As.insert(i, i + 1) = 0.5;
     }
@@ -192,7 +191,7 @@ Sparse get_A_hat(Vector &rho, Vector &m, Sparse &As, Sparse &At) {
         A.insert(i, i) = vec_1[i];
     }
     for (int i = 0; i < vec_2.rows(); i++) {
-        A.insert(i + vec_1.rows(), i + vec_1.rows()) = vec_2[i] + vec_3[i];
+        A.insert(i + vec_1.rows(), i + vec_1.rows()) = vec_2[i] * vec_3[i];
     }
     return A;
 }
@@ -204,7 +203,14 @@ Vector get_GwL(Vector &m,
         Sparse &At,
         Sparse &D1,
         Sparse &D2) {
-    Vector GmM = 2 * m.asDiagonal() * As.transpose() * At * rho.cwiseInverse().eval() + D1.transpose() * lambda;
+    Vector GmL1 = 2.0 * m.asDiagonal() * As.transpose() * At * rho.cwiseInverse();
+    Vector GmL2 = D1.transpose() * lambda;
+
+    // std::cout << "As: " << As << std::endl;
+    // exit(0);
+    
+    // 
+    Vector GmL = GmL1 + GmL2;
     // Vector GmRho =
     //     rho.cwiseInverse()
     //        .array()
@@ -213,19 +219,16 @@ Vector get_GwL(Vector &m,
     //        .matrix()
     //        .asDiagonal()
     //        * (- At.transpose()) * As * m.cwiseProduct(m) + D2.transpose() * lambda;
-    Vector GmRho =
-        rho.cwiseProduct(rho)
-           .eval()
-           .cwiseInverse()
-           .eval()
-           .asDiagonal()
-           * (- At.transpose()) * As * m.cwiseProduct(m) + D2.transpose() * lambda;
-    Vector result (GmM.size() + GmRho.size());
-    for (int i = 0; i < GmM.size() + GmRho.size(); i++) {
-        if (i >= GmM.size()) {
-            result[i] = GmRho[i - GmM.size()];
+    Vector GrhoL =
+        rho.cwiseProduct(rho).eval().cwiseInverse().eval().asDiagonal() *
+            (-At.transpose()) * As * m.cwiseProduct(m) +
+        D2.transpose() * lambda;
+    Vector result(GmL.size() + GrhoL.size());
+    for (int i = 0; i < GmL.size() + GrhoL.size(); i++) {
+        if (i >= GmL.size()) {
+            result[i] = GrhoL[i - GmL.size()];
         } else {
-            result[i] = GmM[i];
+            result[i] = GmL[i];
         }
     }
     return result;
@@ -245,6 +248,8 @@ Vector get_GlambdaL(Vector &m, Vector &rho, Vector &q, Sparse &D) {
 
 Sparse get_zero_matrix(Sparse &S, Sparse &A_hat) {
     Sparse result(S.rows(), A_hat.cols());
+
+    result.setZero();
 
     return result;
 }
@@ -369,34 +374,37 @@ int main() {
 
     q /= h;
     
-    Sparse D, D1, D2, A, As, At, A_hat, S;
+    Sparse D, D1, D2, As, At;
 
     calc_fixed_matrices(mspace, ntime, h, D, D1, D2, As, At);
 
     for (int i = 0; i < iters; i++) {
-        A_hat = get_A_hat(rho, m, As, At);
+        Sparse A_hat = get_A_hat(rho, m, As, At);
         // A_hat is diagonal so this is the same as inverse(A_hat)
-        S = -D * A_hat.cwiseInverse() * D.transpose();
+        Sparse S = -D * A_hat.cwiseInverse() * D.transpose();
 
-        A = jointb(joinlr(A_hat, D.transpose()), joinlr(get_zero_matrix(S, A_hat), S));
+        Sparse A = jointb(joinlr(A_hat, D.transpose()), joinlr(get_zero_matrix(S, A_hat), S));
         
         Vector GwL = get_GwL(m, rho, lambda, As, At, D1, D2);
         Vector GlambdaL = get_GlambdaL(m, rho, q, D);
         Vector b(GwL.size() + GlambdaL.size());
         for (int i = 0; i < GwL.size() + GlambdaL.size(); i++) {
             if (i >= GwL.size()) {
-                b[i] = GlambdaL[i - GwL.size()];
+                b[i] = -GlambdaL[i - GwL.size()];
             } else {
-                b[i] = GwL[i];
+                b[i] = -GwL[i];
             }
         }
+        // std::cout << "b is: " << b << std::endl;
+        // exit(0);
         // Check convergence
         std::cout << "norm(GwL): " << GwL.norm() / (mspace * ntime) << std::endl;
         std::cout << "norm(GlambdaL): " << GlambdaL.norm() / (mspace * ntime) << std::endl;
         std::cout << "Norm: " << b.norm() / (mspace * ntime) << std::endl;
         
         // Solve A(solution) = b
-        Eigen::BiCGSTAB<Sparse, Eigen::IncompleteLUT<double>> solver;
+        // Eigen::BiCGSTAB<Sparse, Eigen::IncompleteLUT<double>> solver;
+        Eigen::BiCGSTAB<Sparse> solver;
         // solver.preconditioner().setDroptol(.001);
         // solver.setMaxIterations(100000);
         solver.compute(A);
@@ -436,9 +444,9 @@ int main() {
     for (int x = 0; x < ntime; x++) {
         for (int y = 0; y < mspace; y++) {
             std::cout 
-                << ((double) x) / ((double) ntime)
+                << x
                 << ", " 
-                << ((double) y) / ((double) mspace)
+                << y
                 << ": " 
                 << rho[x * mspace + y]
                 << std::endl;
