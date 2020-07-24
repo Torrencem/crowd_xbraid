@@ -12,6 +12,7 @@ global h
 global A_hat
 global D
 global S
+global At
 
 space_steps = 45;
 time_steps = 45;
@@ -55,14 +56,9 @@ for i=1:iters
     rho = rho + alpha * drho;
     lambda = lambda + alpha * dlambda;
 end
-rho_reshaped = reshape(rho, [space_steps, time_steps + 1]);
-[X, Y] = meshgrid(0:1/time_steps:1, 1/space_steps:1/space_steps:1);
+rho_reshaped = reshape(At * rho, [space_steps, time_steps]);
+[X, Y] = meshgrid(1/time_steps:1/time_steps:1, 1/space_steps:1/space_steps:1);
 surf(X, Y, rho_reshaped)
-
-global D1
-global D2
-global As
-global At
 
 function dimens = get_zero_matrix_size()
     global S
