@@ -346,7 +346,7 @@ int main() {
     Vector q(mspace * (ntime + 2), 1);
 
     double time = 1.0;
-    int iters = 5;
+    int iters = 15;
 
     double h = time / ntime;
 
@@ -384,17 +384,29 @@ int main() {
         Sparse S = -D * A_hat.cwiseInverse() * D.transpose();
 
         Sparse A = jointb(joinlr(A_hat, D.transpose()), joinlr(get_zero_matrix(S, A_hat), S));
+        int dim_D_1 = D.rows();
+        int dim_D_2 = D.cols();
+        Sparse tl(dim_D_2, dim_D_2);
+        tl.setIdentity();
+        Sparse br(dim_D_1, dim_D_1);
+        br.setIdentity();
+        Sparse tr(dim_D_2, dim_D_1);
+        tr.setZero();
+        Sparse bl = -D * A_hat.cwiseInverse();
+
+        Sparse preconditioner = jointb(joinlr(tl, tr), joinlr(bl, br));
         
         Vector GwL = get_GwL(m, rho, lambda, As, At, D1, D2);
         Vector GlambdaL = get_GlambdaL(m, rho, q, D);
         Vector b(GwL.size() + GlambdaL.size());
         for (int i = 0; i < GwL.size() + GlambdaL.size(); i++) {
             if (i >= GwL.size()) {
-                b[i] = -GlambdaL[i - GwL.size()];
+                b[i] = GlambdaL[i - GwL.size()];
             } else {
-                b[i] = -GwL[i];
+                b[i] = GwL[i];
             }
         }
+        b = -preconditioner * b;
         // std::cout << "b is: " << b << std::endl;
         // exit(0);
         // Check convergence
@@ -403,8 +415,8 @@ int main() {
         std::cout << "Norm: " << b.norm() / (mspace * ntime) << std::endl;
         
         // Solve A(solution) = b
-        // Eigen::BiCGSTAB<Sparse, Eigen::IncompleteLUT<double>> solver;
-        Eigen::BiCGSTAB<Sparse> solver;
+        Eigen::BiCGSTAB<Sparse, Eigen::IncompleteLUT<double>> solver;
+        // Eigen::BiCGSTAB<Sparse> solver;
         // solver.preconditioner().setDroptol(.001);
         // solver.setMaxIterations(100000);
         solver.compute(A);

@@ -10,3 +10,5 @@ burger
 crowd_horesh
 **/*.dSYM/*
 compile_flags.txt
+**/*.session.vim
+out.txt
