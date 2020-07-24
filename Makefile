@@ -141,7 +141,7 @@ model_problem_pp: src/model_problem.cpp $(BRAID_LIB_FILE)
 
 crowd_horesh: src/crowd_horesh.cpp
 	@echo "Building" $@ "..."
-	$(MPICXX) $(CXXFLAGS) -o crowd_horesh src/crowd_horesh.cpp -I $(EIGEN_DIR) $(EXTRAFLAGS)
+	clang++ $(CXXFLAGS) -o crowd_horesh src/crowd_horesh.cpp -I $(EIGEN_DIR) $(EXTRAFLAGS) -Wextra
 
 clean:
 	rm -f *.out.*
