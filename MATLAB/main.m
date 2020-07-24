@@ -8,24 +8,25 @@ global m
 global rho
 global lambda
 global q
-global h
+global d_time
+global d_space
 global A_hat
 global D
 global S
 global At
 global preconditioner
 
-space_steps = 20;
-time_steps = 48;
+space_steps = 200;
+time_steps = 10;
 
-m = rand((space_steps + 1) * time_steps, 1) * 0.1;
+m = ones((space_steps + 1) * time_steps, 1) * 0.1;
 rho = ones(space_steps * (time_steps + 1), 1) * 0.5;
-lambda = rand(space_steps * (time_steps + 2), 1) * 0.1;
+lambda = ones(space_steps * (time_steps + 2), 1) * 0.1;
 q = zeros(space_steps * (time_steps + 2), 1);
 
 time = 1;
-h = time/time_steps;
-
+d_time = time/time_steps;
+d_space = 1/space_steps;
 % Initial and final conditions
 %q(1+space_steps/2:space_steps) = ones(space_steps/2, 1);
 %q(space_steps * (time_steps + 1)+ 1 : space_steps * (time_steps + 3/2)) = ones(space_steps/2, 1);
@@ -34,11 +35,11 @@ h = time/time_steps;
 q(1:space_steps) = ones(space_steps, 1)*0.5;
 q(space_steps * (time_steps + 1) + 1: space_steps * (time_steps + 2)) = -1 * (ones(space_steps, 1)*0.5 + sin((0:1/(space_steps-1):1) * 2*pi)'*0.5 );
 
-q = q * (1/h);
+q = q * (1/d_time);
 
 calc_fixed_matrices()
 
-iters = 15;
+iters = 3;
 for i=1:iters
     recalc_matrices()
 
@@ -97,7 +98,7 @@ end
 function D = get_derivative_matrix_space()
     global space_steps
     global time_steps
-    global h
+    global d_space
     top_bottom = sparse(space_steps, (space_steps + 1) * time_steps);
     interior_block = sparse(space_steps, space_steps + 1);
     for i=1:space_steps
@@ -106,14 +107,14 @@ function D = get_derivative_matrix_space()
     end
     interior_cell = repmat({interior_block}, 1, time_steps);
     D = [top_bottom; blkdiag(interior_cell{:}); top_bottom];  
-    D = (1/h) * D;
+    D = (1/d_space) * D;
 end
 
 
 function D = get_derivative_matrix_time()
     global space_steps
     global time_steps
-    global h
+    global d_time
     top = sparse(space_steps, space_steps * (time_steps + 1));
     bottom = sparse(space_steps, space_steps * (time_steps + 1));
     for i=1:space_steps
@@ -131,7 +132,7 @@ function D = get_derivative_matrix_time()
     
     D = [top; center; bottom];
     
-    D = (1/h) * D;
+    D = (1/d_time) * D;
 end
 
 function As = get_As()
@@ -189,7 +190,6 @@ function reward = reward(x, dm, drho, dlambda)
     global m
     global rho
     global lambda
-    global preconditioner
     b = -[get_GwL(m+x*dm, rho+x*drho, lambda+x*dlambda); get_GlambdaL(m+x*dm, rho+x*drho)];
     reward = norm(b)^2;
 end
