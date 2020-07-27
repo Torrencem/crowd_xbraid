@@ -16,8 +16,8 @@ global S
 global At
 global preconditioner
 
-space_steps = 200;
-time_steps = 10;
+space_steps = 30;
+time_steps = 20;
 
 m = ones((space_steps + 1) * time_steps, 1) * 0.1;
 rho = ones(space_steps * (time_steps + 1), 1) * 0.5;
@@ -41,11 +41,13 @@ calc_fixed_matrices()
 
 iters = 3;
 for i=1:iters
-    recalc_matrices()
+    recalc_matrices(m, rho)
 
     A = [A_hat, D'; zeros(get_zero_matrix_size()), S];
     b = -preconditioner * [get_GwL(m, rho, lambda); get_GlambdaL(m, rho)];
+    
     disp(norm(b)/(space_steps*time_steps)); % Quick and dirty way to check convergence.
+    
     solution = A\b;
 
     dm = solution(1 : (space_steps + 1) * time_steps);
@@ -57,6 +59,7 @@ for i=1:iters
     m = m + alpha * dm;
     rho = rho + alpha * drho;
     lambda = lambda + alpha * dlambda;
+    
 end
 
 rho_reshaped = reshape(At * rho, [space_steps, time_steps]);
@@ -84,12 +87,12 @@ function calc_fixed_matrices()
     At = get_At();
 end
 
-function recalc_matrices()
+function recalc_matrices(m, rho)
     global A_hat
     global S
     global D
     global preconditioner
-    A_hat = get_A_hat();
+    A_hat = get_A_hat(m, rho);
     S = -D / A_hat * D';
     dim_D = size(D);
     preconditioner = [eye(dim_D(2)), zeros([dim_D(2), dim_D(1)]); -D/A_hat, eye(dim_D(1))];
@@ -159,9 +162,7 @@ function At = get_At()
     end
 end
 
-function A = get_A_hat()
-    global rho
-    global m
+function A = get_A_hat(m, rho)
     global As
     global At
     vec_1 = 2 * As' * At * (1./rho);
@@ -190,14 +191,20 @@ function reward = reward(x, dm, drho, dlambda)
     global m
     global rho
     global lambda
-    b = -[get_GwL(m+x*dm, rho+x*drho, lambda+x*dlambda); get_GlambdaL(m+x*dm, rho+x*drho)];
-    reward = norm(b)^2;
+    global preconditioner
+    newm = m + x * dm;
+    newrho = rho + x * drho;
+    newlambda = lambda + x * dlambda;
+    recalc_matrices(newm, newrho)
+    b = -preconditioner*[get_GwL(newm, newrho, newlambda); get_GlambdaL(newm, newrho)];
+    reward = norm(b);
 end
 
 function alpha = line_search(dm, drho, dlambda)
     f = @(x) reward(x, dm, drho, dlambda);
     options = optimoptions(@fminunc, 'Display', 'none');
-    alpha = fminunc(f, 0, options); 
+    alpha = fminunc(f, 1, options); 
+    
 %     global trust_radius
 % 
 %     a = -trust_radius;
