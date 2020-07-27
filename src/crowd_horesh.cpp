@@ -348,7 +348,7 @@ int main() {
     double time = 1.0;
     int iters = 15;
 
-    double h = time / ntime;
+    double d_time = time / ntime;
 
     // for (int i = 0; i < mspace / 2; i++) {
     //     q.insert(i, 0) = 0.1;
@@ -372,11 +372,11 @@ int main() {
         acc += 1.0 / ((double) mspace - 1.0);
     }
 
-    q /= h;
-    
+    q /= d_time;
+
     Sparse D, D1, D2, As, At;
 
-    calc_fixed_matrices(mspace, ntime, h, D, D1, D2, As, At);
+    calc_fixed_matrices(mspace, ntime, d_time, D, D1, D2, As, At);
 
     for (int i = 0; i < iters; i++) {
         Sparse A_hat = get_A_hat(rho, m, As, At);
