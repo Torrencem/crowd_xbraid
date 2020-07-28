@@ -1,6 +1,5 @@
 clc
 clear
-
 % Using only one spatial dimension for simplicity, like we will in TriMGRIT
 global space_steps
 global time_steps
@@ -12,12 +11,13 @@ global d_time
 global d_space
 global A_hat
 global D
-global S
 global At
-global preconditioner
+global filler_zeros
 
 space_steps = 30;
 time_steps = 20;
+show = @(x) surf(reshape(x, [space_steps, time_steps+1]));
+
 
 m = ones((space_steps + 1) * time_steps, 1) * 0.1;
 rho = ones(space_steps * (time_steps + 1), 1) * 0.5;
@@ -33,7 +33,7 @@ d_space = 1/space_steps;
 %q(space_steps * (time_steps + 3/2) + 1 : space_steps * (time_steps + 2)) = zeros(space_steps/2, 1) + 0.1;
 
 q(1:space_steps) = ones(space_steps, 1)*0.5;
-q(space_steps * (time_steps + 1) + 1: space_steps * (time_steps + 2)) = -1 * (ones(space_steps, 1)*0.5 + sin((0:1/(space_steps-1):1) * 2*pi)'*0.5 );
+q(space_steps * (time_steps + 1) + 1: space_steps * (time_steps + 2)) = -1 * (ones(space_steps, 1)*0.5 - sin((0:1/(space_steps-1):1) * 2*pi)'*0.5 );
 
 q = q * (1/d_time);
 
@@ -43,8 +43,8 @@ iters = 3;
 for i=1:iters
     recalc_matrices(m, rho)
 
-    A = [A_hat, D'; zeros(get_zero_matrix_size()), S];
-    b = -preconditioner * [get_GwL(m, rho, lambda); get_GlambdaL(m, rho)];
+    A = [A_hat, D'; D, filler_zeros];
+    b = -[get_GwL(m, rho, lambda); get_GlambdaL(m, rho)];
     
     disp(norm(b)/(space_steps*time_steps)); % Quick and dirty way to check convergence.
     
@@ -66,36 +66,25 @@ rho_reshaped = reshape(At * rho, [space_steps, time_steps]);
 [X, Y] = meshgrid(1/time_steps:1/time_steps:1, 1/space_steps:1/space_steps:1);
 surf(X, Y, rho_reshaped)
 
-function dimens = get_zero_matrix_size()
-    global S
-    global A_hat
-    rows = size(S);
-    cols = size(A_hat);
-    dimens = [rows(1), cols(2)];
-end
-
 function calc_fixed_matrices()
     global D1
     global D2
     global D
     global As
     global At
+    global filler_zeros
     D1 = get_derivative_matrix_space();
     D2 = get_derivative_matrix_time();
     D = [D1, D2];
     As = get_As();
     At = get_At();
+    dim_d = size(D);
+    filler_zeros = zeros(dim_d(1));
 end
 
 function recalc_matrices(m, rho)
     global A_hat
-    global S
-    global D
-    global preconditioner
     A_hat = get_A_hat(m, rho);
-    S = -D / A_hat * D';
-    dim_D = size(D);
-    preconditioner = [eye(dim_D(2)), zeros([dim_D(2), dim_D(1)]); -D/A_hat, eye(dim_D(1))];
 end
 
 function D = get_derivative_matrix_space()
@@ -191,12 +180,11 @@ function reward = reward(x, dm, drho, dlambda)
     global m
     global rho
     global lambda
-    global preconditioner
     newm = m + x * dm;
     newrho = rho + x * drho;
     newlambda = lambda + x * dlambda;
     recalc_matrices(newm, newrho)
-    b = -preconditioner*[get_GwL(newm, newrho, newlambda); get_GlambdaL(newm, newrho)];
+    b = -[get_GwL(newm, newrho, newlambda); get_GlambdaL(newm, newrho)];
     reward = norm(b);
 end
 
@@ -224,7 +212,7 @@ function alpha = line_search(dm, drho, dlambda)
 %         end
 %         c = b - (b - a)/gr;
 %         d = a + (b - a)/gr;
-%     end
+%     end5
 %     
 %     alpha = (a+b)/2;
 %     fprintf("Alpha: %f\n", alpha)
