@@ -27,14 +27,6 @@ double final_condition(double x) {
     return nice_curve(x, 0.4);
 }
 
-Sparse inverse(const Sparse &A) {
-    Eigen::SparseLU<Sparse> solver;
-    solver.compute(A);
-    Sparse I (A.rows(), A.cols());
-    I.setIdentity();
-    return solver.solve(I);
-}
-
 Sparse block_diag(const Sparse &diag, const int ncopies) {
     auto m2 = SparseMatrix<double> (diag.rows() * ncopies, diag.cols() * ncopies);
 
@@ -49,17 +41,6 @@ Sparse block_diag(const Sparse &diag, const int ncopies) {
 
     return m2;
 }
-
-// /// Lay a vector out on the main diagonal of a square matrix
-// Sparse diag(const Vector &v) {
-//     Sparse result (v.size(), v.size());
-//
-//     for (int i = 0; i < v.size(); i++) {
-//         result.insert(i, i) = v[i];
-//     }
-//
-//     return result;
-// }
 
 /// Compute the equivelent of [a; b] from matlab
 Sparse jointb(const Sparse &a,
@@ -222,20 +203,8 @@ Vector get_GwL(Vector &m,
         Sparse &D2) {
     Vector GmL1 = 2.0 * m.asDiagonal() * As.transpose() * At * rho.cwiseInverse();
     Vector GmL2 = D1.transpose() * lambda;
-
-    // std::cout << "As: " << As << std::endl;
-    // exit(0);
     
-    // 
     Vector GmL = GmL1 + GmL2;
-    // Vector GmRho =
-    //     rho.cwiseInverse()
-    //        .array()
-    //        .square()
-    //        .eval()
-    //        .matrix()
-    //        .asDiagonal()
-    //        * (- At.transpose()) * As * m.cwiseProduct(m) + D2.transpose() * lambda;
     Vector GrhoL =
         rho.cwiseProduct(rho).eval().cwiseInverse().eval().asDiagonal() *
             (-At.transpose()) * As * m.cwiseProduct(m) +
@@ -333,7 +302,6 @@ double line_search(Vector &dm, Vector &drho, Vector &dlambda, Vector &m, Vector 
         return reward(x, dm, drho, dlambda, m, rho, lambda, As, At, D1, D2, q, D);
     };
     double tmp = minarg(f, -0.1, 0.1, 1e-8);
-    // printf("READ THIS: %f\n", tmp);
     return tmp;
 }
 
@@ -403,17 +371,6 @@ int main() {
         Sparse A_hat = get_A_hat(rho, m, As, At);
 
         Sparse A = jointb(joinlr(A_hat, D.transpose()), joinlr(D, filler_zeros));
-        // int dim_D_1 = D.rows();
-        // int dim_D_2 = D.cols();
-        // Sparse tl(dim_D_2, dim_D_2);
-        // tl.setIdentity();
-        // Sparse br(dim_D_1, dim_D_1);
-        // br.setIdentity();
-        // Sparse tr(dim_D_2, dim_D_1);
-        // tr.setZero();
-        // Sparse bl = -D * A_hat.cwiseInverse();
-        //
-        // Sparse preconditioner = jointb(joinlr(tl, tr), joinlr(bl, br));
         
         Vector GwL = get_GwL(m, rho, lambda, As, At, D1, D2);
         Vector GlambdaL = get_GlambdaL(m, rho, q, D);
@@ -425,9 +382,7 @@ int main() {
                 b[i] = GwL[i];
             }
         }
-        // b = -preconditioner * b;
-        // std::cout << "b is: " << b << std::endl;
-        // exit(0);
+
         // Check convergence
         std::cout << "norm(GwL): " << GwL.norm() / (mspace * ntime) << std::endl;
         std::cout << "norm(GlambdaL): " << GlambdaL.norm() / (mspace * ntime) << std::endl;
@@ -435,9 +390,6 @@ int main() {
         
         // Solve A(solution) = b
         Eigen::BiCGSTAB<Sparse, Eigen::IncompleteLUT<double>> solver;
-        // Eigen::BiCGSTAB<Sparse> solver;
-        // solver.preconditioner().setDroptol(.001);
-        // solver.setMaxIterations(100000);
         solver.compute(A);
         if (solver.info() != Eigen::Success) {
             printf("Error decomposing A!\n");
@@ -448,7 +400,6 @@ int main() {
             printf("Error solving Ax = b!\n");
             exit(1);
         }
-        // Vector solution = inverse(A) * b;
         
         Eigen::Map<Vector> dm(solution.data(), (mspace + 1) * ntime);
         int start = (mspace + 1) * ntime;
