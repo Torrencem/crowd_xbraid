@@ -1,6 +1,7 @@
 #include <iostream>
 #include <Eigen/Sparse>
 #include <Eigen/SparseLU>
+#include <math.h>
 
 using Eigen::SparseMatrix;
 using Eigen::MatrixXd;
@@ -9,6 +10,22 @@ using Eigen::VectorXd;
 // typedef SparseMatrix<double> Sparse;
 typedef SparseMatrix<double> Sparse;
 typedef VectorXd Vector;
+
+double nice_curve(double x, double c) {
+    double exponent = 1.0 / (1.0 + (x - c) * (x - c));
+    double pow_of_2 = powf(2.0, exponent);
+    return powf(pow_of_2 - 1.0, 50.0);
+}
+
+/// Initial condition for rho
+double initial_condition(double x) {
+    return nice_curve(x, 0.6);
+}
+
+/// Final condition for rho
+double final_condition(double x) {
+    return nice_curve(x, 0.4);
+}
 
 Sparse inverse(const Sparse &A) {
     Eigen::SparseLU<Sparse> solver;
@@ -331,16 +348,16 @@ int main() {
     // test_join();
     // test_min();
     // exit(0);
-    int mspace = 45;
+    int mspace = 100;
 
     // assert(mspace % 2 == 0);
 
-    int ntime = 45;
+    int ntime = 150;
 
     Vector m((mspace + 1) * ntime);
     Vector rho(mspace * (ntime + 1));
     Vector lambda(mspace * (ntime + 2));
-    m.setConstant(0.1);
+    m.setConstant(0.0);
     rho.setConstant(0.5);
     lambda.setConstant(0.1);
     Vector q(mspace * (ntime + 2), 1);
@@ -363,13 +380,15 @@ int main() {
     //     q.insert(i, 0) = 0.1;
     // }
 
+    double accumulator = 0.0;
     for (int i = 0; i < mspace; i++) {
-        q[i] = 0.5;
+        q[i] = initial_condition(accumulator);
+        accumulator += 1.0 / ((double)mspace - 1.0);
     }
-    double acc = 0.0;
+    accumulator = 0.0;
     for (int i = mspace * (ntime + 1); i < mspace * (ntime + 2); i++) {
-        q[i] = -0.5 + -sin(acc * 2.0 * 3.141593) * 0.5;
-        acc += 1.0 / ((double) mspace - 1.0);
+        q[i] = -final_condition(accumulator);
+        accumulator += 1.0 / ((double)mspace - 1.0);
     }
 
     q /= d_time;
@@ -378,23 +397,23 @@ int main() {
 
     calc_fixed_matrices(mspace, ntime, d_time, D, D1, D2, As, At);
 
+    Sparse filler_zeros (D.rows(), D.rows());
+
     for (int i = 0; i < iters; i++) {
         Sparse A_hat = get_A_hat(rho, m, As, At);
-        // A_hat is diagonal so this is the same as inverse(A_hat)
-        Sparse S = -D * A_hat.cwiseInverse() * D.transpose();
 
-        Sparse A = jointb(joinlr(A_hat, D.transpose()), joinlr(get_zero_matrix(S, A_hat), S));
-        int dim_D_1 = D.rows();
-        int dim_D_2 = D.cols();
-        Sparse tl(dim_D_2, dim_D_2);
-        tl.setIdentity();
-        Sparse br(dim_D_1, dim_D_1);
-        br.setIdentity();
-        Sparse tr(dim_D_2, dim_D_1);
-        tr.setZero();
-        Sparse bl = -D * A_hat.cwiseInverse();
-
-        Sparse preconditioner = jointb(joinlr(tl, tr), joinlr(bl, br));
+        Sparse A = jointb(joinlr(A_hat, D.transpose()), joinlr(D, filler_zeros));
+        // int dim_D_1 = D.rows();
+        // int dim_D_2 = D.cols();
+        // Sparse tl(dim_D_2, dim_D_2);
+        // tl.setIdentity();
+        // Sparse br(dim_D_1, dim_D_1);
+        // br.setIdentity();
+        // Sparse tr(dim_D_2, dim_D_1);
+        // tr.setZero();
+        // Sparse bl = -D * A_hat.cwiseInverse();
+        //
+        // Sparse preconditioner = jointb(joinlr(tl, tr), joinlr(bl, br));
         
         Vector GwL = get_GwL(m, rho, lambda, As, At, D1, D2);
         Vector GlambdaL = get_GlambdaL(m, rho, q, D);
@@ -406,7 +425,7 @@ int main() {
                 b[i] = GwL[i];
             }
         }
-        b = -preconditioner * b;
+        // b = -preconditioner * b;
         // std::cout << "b is: " << b << std::endl;
         // exit(0);
         // Check convergence
