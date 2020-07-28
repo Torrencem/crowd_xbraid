@@ -12,17 +12,21 @@ global d_space
 global A_hat
 global D
 global At
+global As
 global filler_zeros
 
-space_steps = 30;
-time_steps = 20;
+space_steps = 40;
+time_steps = 10;
 show = @(x) surf(reshape(x, [space_steps, time_steps+1]));
+showm = @(x) surf(reshape(x, [space_steps+1, time_steps]));
+showl = @(x) surf(reshape(x, [space_steps, time_steps+2]));
 
-
-m = ones((space_steps + 1) * time_steps, 1) * 0.1;
+m = zeros((space_steps + 1) * time_steps, 1);
 rho = ones(space_steps * (time_steps + 1), 1) * 0.5;
-lambda = ones(space_steps * (time_steps + 2), 1) * 0.1;
+lambda = ones(space_steps * (time_steps + 2), 1) * 0.5;
 q = zeros(space_steps * (time_steps + 2), 1);
+
+expodist = @(x, k) (2^(80*(1/(1+(x-k)^2)-1)));
 
 time = 1;
 d_time = time/time_steps;
@@ -32,14 +36,18 @@ d_space = 1/space_steps;
 %q(space_steps * (time_steps + 1)+ 1 : space_steps * (time_steps + 3/2)) = ones(space_steps/2, 1);
 %q(space_steps * (time_steps + 3/2) + 1 : space_steps * (time_steps + 2)) = zeros(space_steps/2, 1) + 0.1;
 
-q(1:space_steps) = ones(space_steps, 1)*0.5;
-q(space_steps * (time_steps + 1) + 1: space_steps * (time_steps + 2)) = -1 * (ones(space_steps, 1)*0.5 - sin((0:1/(space_steps-1):1) * 2*pi)'*0.5 );
+q(1:space_steps) = arrayfun(@(x) 0.8*expodist(x, 0.3) + 0.3*expodist(x, 0.7), 0:1/(space_steps-1):1);
+q(space_steps * (time_steps + 1) + 1: space_steps * (time_steps + 2)) = -1*arrayfun(@(x) 0.1*expodist(x, 0.3) + 0.8*expodist(x, 0.7), 0:1/(space_steps-1):1);
 
 q = q * (1/d_time);
 
 calc_fixed_matrices()
 
-iters = 3;
+if abs(sum(q(1:space_steps)) + sum(q(space_steps * (time_steps + 1) + 1: space_steps * (time_steps + 2)))) > 1e-5
+    disp("Conservation of mass is false.  This is not a problem, but might lead to seemingly strange behaviour.");
+end
+
+iters = 10;
 for i=1:iters
     recalc_matrices(m, rho)
 
@@ -49,22 +57,18 @@ for i=1:iters
     disp(norm(b)/(space_steps*time_steps)); % Quick and dirty way to check convergence.
     
     solution = A\b;
-
     dm = solution(1 : (space_steps + 1) * time_steps);
     drho = solution((space_steps + 1) * time_steps + 1 : (space_steps + 1) * time_steps + space_steps * (time_steps + 1));
     dlambda = solution((space_steps + 1) * time_steps + space_steps * (time_steps + 1) + 1 : length(solution));
 
     alpha = line_search(dm, drho, dlambda);
-
+    
     m = m + alpha * dm;
+    m = m * 1;
     rho = rho + alpha * drho;
     lambda = lambda + alpha * dlambda;
-    
 end
-
-rho_reshaped = reshape(At * rho, [space_steps, time_steps]);
-[X, Y] = meshgrid(1/time_steps:1/time_steps:1, 1/space_steps:1/space_steps:1);
-surf(X, Y, rho_reshaped)
+show(rho)
 
 function calc_fixed_matrices()
     global D1
