@@ -311,6 +311,7 @@ void test_min() {
     std::cout << "Min is around: " << min << std::endl;
 }
 
+#ifndef CROWD_HORESH_LIBRARY
 int main() {
     // test_block_diag();
     // test_join();
@@ -435,3 +436,4 @@ int main() {
         }
     }
 }
+#endif
