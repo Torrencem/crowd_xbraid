@@ -47,9 +47,10 @@
 #include "tribraid.hpp"
 #include "braid_test.h"
 #define PI 3.14159265
-#define g(dt, dx) dt / (2 * dx)
-//#define g(dt,dx) 0.0
-#define b(dt, dx, nu) nu *dt / (dx * dx)
+#define TAG_WORKER_RESULT 42
+#define TYPE_RHO 2
+#define TYPE_LAMBDA 3
+#define TYPE_M 4
 
 // #include "lapacke.h"
 
@@ -80,6 +81,7 @@ public:
     FILE *ufile, *vfile, *wfile;
     std::vector<Vector> m, rho, lambda, q;
     Sparse K;
+    Vector GlambdaL, GmL, GrhoL;
 
     // Main constructor
     MyBraidApp(MPI_Comm comm_t__, int rank_, double tstart_ = 0.0, double tstop_ = 1.0, int ntime_ = 100);
@@ -147,6 +149,27 @@ public:
     // Compute \nabla_\rho_{i - 1/2}
     const Vector compute_GwRhoi(int index);
 };
+
+const Vector MyBraidApp::compute_GwMi(int index) {
+    Eigen::Map<Vector> res(this->GmL.data() + (index * (mspace + 2)), mspace + 2);
+
+    Vector res_(res);
+    return res_;
+}
+
+const Vector MyBraidApp::compute_GwLi(int index) {
+    Eigen::Map<Vector> res(this->GlambdaL.data() + (index * mspace), mspace);
+
+    Vector res_(res);
+    return res_;
+}
+
+const Vector MyBraidApp::compute_GwRhoi(int index) {
+    Eigen::Map<Vector> res(this->GrhoL.data() + (index * (mspace + 1)), mspace + 1);
+
+    Vector res_(res);
+    return res_;
+}
 
 MyBraidApp::MyBraidApp(MPI_Comm comm_t_, int rank_, double tstart_, double tstop_, int ntime_) : TriBraidApp(comm_t_, tstart_, tstop_, ntime_) {
 
@@ -299,10 +322,11 @@ int MyBraidApp::TriSolve(braid_Vector uleft_, braid_Vector uright_,
         } else {
             delta_rho_ip1 = uright->drho;
         }
-        Sparse I (K.size(), K.size());
+        Sparse I (K.rows(), K.cols());
         I.setIdentity();
-        Sparse A = -dt * Qi * K * Pi.cwiseInverse() * K.transpose() - I / dt;
-        Vector b = dt * Qi * Pi.cwiseInverse() * nabla_m_i - Qi * delta_rho_ip1 - dt * Qi * nabla_lambda_i - delta_lambda_im1 / dt - nabla_rho_i;
+        Sparse A = -dt * Qi * K * Pi.cwiseInverse() * K.transpose();
+        A -= I / dt;
+        Vector b = dt * Qi * K * Pi.cwiseInverse() * nabla_m_i - Qi * delta_rho_ip1 - dt * Qi * nabla_lambda_i - delta_lambda_im1 / dt - nabla_rho_i;
         u->dlambda = b * A.cwiseInverse();
 
         // Compute delta_m
@@ -400,28 +424,52 @@ int MyBraidApp::Access(braid_Vector u_, BraidAccessStatus &astatus) {
 
     int done, index;
 
-    /* Print solution to file if simulation is over */
     astatus.GetDone(&done);
     if (done) {
-        int j;
-
-        // TODO: Send drho dlambda and dm (along with the index) to the main process in MPI
-
         astatus.GetTIndex(&index);
 
-        // TODO
-
-        // fprintf(ufile, "%05d: ", index);
-        // fprintf(vfile, "%05d: ", index);
-        // fprintf(wfile, "%05d: ", index);
-        for (j = 0; j < (mspace - 1); j++) {
-            // fprintf(ufile, "% 1.14e, ", (*u->u)[j]);
-            // fprintf(vfile, "% 1.14e, ", (*u->v)[j]);
-            // fprintf(wfile, "% 1.14e, ", (*u->w)[j]);
+        MPI_Request send_request;
+        int message_size = sizeof(int) * 2 + sizeof(double) * (mspace + 2);
+        
+        // type is TYPE_RHO
+        {
+        char *buffer = (char *) calloc(message_size, 1);
+        int *ibuffer = (int *) buffer;
+        *(ibuffer++) = TYPE_RHO;
+        *(ibuffer++) = index;
+        double *dbuffer = (double *) ibuffer;
+        for (int i = 0; i < mspace + 1; i++) {
+            dbuffer[i] = u->drho[i];
         }
-        // fprintf(ufile, "% 1.14e\n", (*u->u)[j]);
-        // fprintf(vfile, "% 1.14e\n", (*u->v)[j]);
-        // fprintf(wfile, "% 1.14e\n", (*u->w)[j]);
+        MPI_Isend((void *) buffer, message_size, MPI_BYTE, 0, TAG_WORKER_RESULT, MPI_COMM_WORLD, &send_request);
+        free(buffer);
+        }
+        // type is TYPE_LAMBDA
+        {
+        char *buffer = (char *) calloc(message_size, 1);
+        int *ibuffer = (int *) buffer;
+        *(ibuffer++) = TYPE_LAMBDA;
+        *(ibuffer++) = index;
+        double *dbuffer = (double *) ibuffer;
+        for (int i = 0; i < mspace; i++) {
+            dbuffer[i] = u->dlambda[i];
+        }
+        MPI_Isend((void *) buffer, message_size, MPI_BYTE, 0, TAG_WORKER_RESULT, MPI_COMM_WORLD, &send_request);
+        free(buffer);
+        }
+        // type is TYPE_M
+        {
+        char *buffer = (char *) calloc(message_size, 1);
+        int *ibuffer = (int *) buffer;
+        *(ibuffer++) = TYPE_M;
+        *(ibuffer++) = index;
+        double *dbuffer = (double *) ibuffer;
+        for (int i = 0; i < mspace + 2; i++) {
+            dbuffer[i] = u->dm[i];
+        }
+        MPI_Isend((void *) buffer, message_size, MPI_BYTE, 0, TAG_WORKER_RESULT, MPI_COMM_WORLD, &send_request);
+        free(buffer);
+        }
     }
 
     return 0;
@@ -557,9 +605,6 @@ int main(int argc, char *argv[]) {
     core.SetAbsTol(tol);
 
     /* Parallel-in-time TriMGRIT simulation */
-    // start = clock();
-    core.Drive();
-    // end = clock();
     mspace = 100;
     ntime = 150;
     time = 1.0;
@@ -567,8 +612,7 @@ int main(int argc, char *argv[]) {
 
     double d_time = time / ntime;
 
-    int START_LOOP_ITER = 1;
-        
+
     app.m = std::vector<Vector>();
     for (int i = 0; i < ntime; i++) {
         Vector m_val (mspace + 1);
@@ -608,14 +652,179 @@ int main(int argc, char *argv[]) {
     }
     app.q[app.q.size() - 1] = q_val / d_time;
 
-    app.K = Vector(mspace, mspace + 1);
+    app.K = Sparse(mspace, mspace + 1);
+
+    Sparse D1 = get_derivative_matrix_space(mspace, ntime, d_time);
+    Sparse D2 = get_derivative_matrix_time(mspace, ntime, d_time);
+    Sparse D = joinlr(D1, D2);
+    Sparse As = get_As(mspace, ntime);
+    Sparse At = get_At(mspace, ntime);
 
     for (int i = 0; i < mspace; i++) {
         app.K.insert(i, i) = -1.0 / dx;
         app.K.insert(i, i + 1) = 1.0 / dx;
     }
 
-    core.Drive();
+    Vector q_long (app.q.size() * app.q[0].size());
+    for (unsigned long i = 0; i < app.q.size(); i++) {
+        for (int j = 0; j < app.q[0].size(); j++) {
+            q_long[i * app.q.size() + j] = app.q[i][j];
+        }
+    }
+
+    for (int i = 0; i < iters; i++) {
+        Vector rho_long (app.rho.size() * app.rho[0].size());
+        for (unsigned long i = 0; i < app.rho.size(); i++) {
+            for (int j = 0; j < app.rho[0].size(); j++) {
+                rho_long[i * app.rho.size() + j] = app.rho[i][j];
+            }
+        }
+        Vector m_long (app.m.size() * app.m[0].size());
+        for (unsigned long i = 0; i < app.m.size(); i++) {
+            for (int j = 0; j < app.m[0].size(); j++) {
+                m_long[i * app.m.size() + j] = app.m[i][j];
+            }
+        }
+        Vector lambda_long (app.lambda.size() * app.lambda[0].size());
+        for (unsigned long i = 0; i < app.lambda.size(); i++) {
+            for (int j = 0; j < app.lambda[0].size(); j++) {
+                lambda_long[i * app.lambda.size() + j] = app.lambda[i][j];
+            }
+        }
+        
+        app.GlambdaL = get_GlambdaL(m_long, rho_long, q_long, D);
+        Vector GmL1 = 2.0 * m_long.asDiagonal() * As.transpose() * At * rho_long.cwiseInverse();
+        Vector GmL2 = D1.transpose() * lambda_long;
+    
+        app.GmL = GmL1 + GmL2;
+        app.GrhoL =
+            rho_long.cwiseProduct(rho_long).eval().cwiseInverse().eval().asDiagonal() *
+                (-At.transpose()) * As * m_long.cwiseProduct(m_long) +
+            D2.transpose() * lambda_long;
+        
+
+        core.Drive();
+
+        if (rank == 0) {
+            // Main processor
+            // Receive from access the results of workers' computation
+            std::vector<Vector> drho(ntime + 1);
+            std::vector<Vector> dlambda(ntime + 2);
+            std::vector<Vector> dm(ntime);
+
+            int num_received = 0;
+
+            while (num_received < ntime * (ntime + 1) * (ntime + 2)) {
+                int type, index;
+                int message_size = sizeof(int) * 2 + sizeof(double) * (mspace + 2);
+                char *buffer = (char *) malloc(message_size);
+                MPI_Recv((void *) buffer, message_size, MPI_BYTE, MPI_ANY_SOURCE, TAG_WORKER_RESULT, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+                int *buffer_ = (int *) buffer;
+                type = *(buffer++);
+                index = *(buffer++);
+                double *dbuffer = (double *) buffer_;
+                if (type == TYPE_RHO) {
+                    Vector drho_val(mspace + 1);
+                    for (int i = 0; i < mspace + 1; i++) {
+                        drho_val[i] = dbuffer[i];
+                    }
+                    drho[index] = drho_val;
+                } else if (type == TYPE_LAMBDA) {
+                    Vector dlambda_val(mspace);
+                    for (int i = 0; i < mspace; i++) {
+                        dlambda_val[i] = dbuffer[i];
+                    }
+                    dlambda[index] = dlambda_val;
+                } else if (type == TYPE_M) {
+                    Vector dm_val(mspace + 2);
+                    for (int i = 0; i < mspace + 2; i++) {
+                        dm_val[i] = dbuffer[i];
+                    }
+                    dm[index] = dm_val;
+                }
+                num_received++;
+                free(buffer);
+            }
+            // Compute global new m, rho, and lambda using line search etc.
+            Vector drho_long (app.rho.size() * app.rho[0].size());
+            for (unsigned long i = 0; i < app.rho.size(); i++) {
+                for (int j = 0; j < app.rho[0].size(); j++) {
+                    drho_long[i * app.rho.size() + j] = drho[i][j];
+                }
+            }
+            Vector dm_long (app.m.size() * app.m[0].size());
+            for (unsigned long i = 0; i < app.m.size(); i++) {
+                for (int j = 0; j < app.m[0].size(); j++) {
+                    dm_long[i * app.m.size() + j] = dm[i][j];
+                }
+            }
+            Vector dlambda_long (app.lambda.size() * app.lambda[0].size());
+            for (unsigned long i = 0; i < app.lambda.size(); i++) {
+                for (int j = 0; j < app.lambda[0].size(); j++) {
+                    dlambda_long[i * app.lambda.size() + j] = dlambda[i][j];
+                }
+            }
+            double alpha = line_search(dm_long, drho_long, dlambda_long, m_long, rho_long, lambda_long, As, At, D1, D2, q_long, D);
+            
+            for (unsigned long i = 0; i < app.m.size(); i++) {
+                app.m[i] += alpha * dm[i];
+            }
+            for (unsigned long i = 0; i < app.m.size(); i++) {
+                app.rho[i] += alpha * drho[i];
+            }
+            for (unsigned long i = 0; i < app.m.size(); i++) {
+                app.lambda[i] += alpha * dlambda[i];
+            }
+            // Send global picture of m, rho, and lambda
+            int message_length = sizeof(double) * (app.m.size() * app.m[0].size() + app.rho.size() * app.rho[0].size() + app.lambda.size() * app.lambda[0].size());
+            double *buffer = (double *) malloc(message_length * sizeof(double));
+            double *buffer_ptr = buffer;
+            for (Vector &m : app.m) {
+                for (double &val : m) {
+                    *(buffer_ptr++) = val;
+                }
+            }
+            for (Vector &rho : app.rho) {
+                for (double &val : rho) {
+                    *(buffer_ptr++) = val;
+                }
+            }
+            for (Vector &lambda : app.lambda) {
+                for (double &val : lambda) {
+                    *(buffer_ptr++) = val;
+                }
+            }
+            MPI_Bcast(buffer, message_length, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+            free(buffer);
+        } else {
+            // Worker
+            // access should have already sent their results to the main processor
+            // Receive a global picture of m, rho, and lambda
+            int message_length = sizeof(double) * (app.m.size() * app.m[0].size() + app.rho.size() * app.rho[0].size() + app.lambda.size() * app.lambda[0].size());
+            double *buffer = (double *) malloc(message_length * sizeof(double));
+            MPI_Bcast(buffer, message_length, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+            double *buffer_ptr = buffer;
+            for (Vector &m : app.m) {
+                for (double &val : m) {
+                    val = *(buffer_ptr++);
+                }
+            }
+            for (Vector &rho : app.rho) {
+                for (double &val : rho) {
+                    val = *(buffer_ptr++);
+                }
+            }
+            for (Vector &lambda : app.lambda) {
+                for (double &val : lambda) {
+                    val = *(buffer_ptr++);
+                }
+            }
+            free(buffer);
+        }
+    }
+
+    // TODO: 
+    // rank == 0 should print some results
 
     /* Print runtime to file (for runtime comparisons)*/
     // time = (double)(end - start) / CLOCKS_PER_SEC;

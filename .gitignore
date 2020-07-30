@@ -5,6 +5,7 @@ model_problem
 model_problem_pp
 model_problem_backwards
 model_problem_upwind
+crowd_horesh_xbraid
 libgfortran.a
 tests
 burger
