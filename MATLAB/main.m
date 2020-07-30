@@ -15,8 +15,8 @@ global At
 global As
 global filler_zeros
 
-space_steps = 4;
-time_steps = 4;
+space_steps = 40;
+time_steps = 40;
 show = @(x) surf(reshape(x, [space_steps, time_steps+1]));
 showm = @(x) surf(reshape(x, [space_steps+1, time_steps]));
 showl = @(x) surf(reshape(x, [space_steps, time_steps+2]));
@@ -60,7 +60,6 @@ for i=1:iters
     dm = solution(1 : (space_steps + 1) * time_steps);
     drho = solution((space_steps + 1) * time_steps + 1 : (space_steps + 1) * time_steps + space_steps * (time_steps + 1));
     dlambda = solution((space_steps + 1) * time_steps + space_steps * (time_steps + 1) + 1 : length(solution));
-    return;
     alpha = line_search(dm, drho, dlambda);
     
     m = m + alpha * dm;
