@@ -60,6 +60,10 @@
 class BraidVector
 {
     public:
+    int index = -1;
+    /// dm is length mspace + 2,
+    /// drho is length mspace + 1,
+    /// dlambda is length mspace
     Vector dm, drho, dlambda;
 
     BraidVector(Vector dm_, Vector drho_, Vector dlambda_) : dm(dm_), drho(drho_), dlambda(dlambda_) { }
@@ -135,6 +139,13 @@ public:
 
     const Vector apply_Phi(Vector &u, Vector &v,
                  const double t, const double dt);
+    
+    // Compute \nabla_m_i
+    const Vector compute_GwMi(int index);
+    // Compute \nabla_\lambda_i
+    const Vector compute_GwLi(int index);
+    // Compute \nabla_\rho_{i - 1/2}
+    const Vector compute_GwRhoi(int index);
 };
 
 MyBraidApp::MyBraidApp(MPI_Comm comm_t_, int rank_, double tstart_, double tstop_, int ntime_) : TriBraidApp(comm_t_, tstart_, tstop_, ntime_) {
@@ -157,11 +168,10 @@ int MyBraidApp::TriResidual(braid_Vector uleft_, braid_Vector uright_,
     BraidVector *r = (BraidVector *) r_;
 
     double t, tprev, tnext, dt;
-    int level, index;
+    int level;
 
     status.GetTriT(&t, &tprev, &tnext);
     status.GetLevel(&level);
-    status.GetTIndex(&index);
 
     /* Get the time-step size */
     if (t < tnext) {
@@ -169,17 +179,8 @@ int MyBraidApp::TriResidual(braid_Vector uleft_, braid_Vector uright_,
     } else {
         dt = t - tprev;
     }
-
-    Sparse X ((mspace + 1), mspace);
     
-    X.insert(0, 0) = 0.25;
-    for (int i = 1; i < mspace + 1; i++) {
-        X.insert(i, i) = 0.25;
-        X.insert(i - 1, i) = 0.25;
-    }
-    
-    Sparse Pi = 2.0 * (X * (rho[index].cwiseInverse() + uright.)).asDiagonal();
-    Sparse Qi = ...;
+    // TODO
 
     return 0;
 }
@@ -207,8 +208,120 @@ int MyBraidApp::TriSolve(braid_Vector uleft_, braid_Vector uright_,
     } else {
         dt = t - tprev;
     }
+    
+    int index, final_index;
 
-    // TODO
+    status.GetTIndex(&index);
+    status.GetNTPoints(&final_index);
+    final_index -= 1;
+
+    Sparse X ((mspace + 1), mspace);
+    
+    X.insert(0, 0) = 0.25;
+    for (int i = 1; i < mspace + 1; i++) {
+        X.insert(i, i) = 0.25;
+        X.insert(i - 1, i) = 0.25;
+    }
+
+    Vector mi = m[index];
+    Vector mim1(mi.size());
+
+    if (index == 0) {
+        mim1.setZero();
+    } else {
+        mim1 = m[index - 1];
+    }
+
+    Vector rhoi = rho[index];
+    Vector rhoip1(rhoi.size());
+
+    if ((unsigned long) index == rho.size() - 1) {
+        rhoip1.setZero();
+    } else {
+        rhoip1 = rho[index + 1];
+    }
+    
+    // Compute Qi and Pi
+    Vector tmp1 = rhoi.cwiseInverse() + rhoip1.cwiseInverse();
+    auto Pi_ = 2.0 * ((X * tmp1).eval()).asDiagonal();
+    Vector tmp2 = mi * mi + mim1 * mim1;
+    Vector tmp3 = rhoi.cwiseProduct(rhoi.cwiseProduct(rhoi)).cwiseInverse();
+    Vector tmp4 = X.transpose() * tmp2;
+    Vector Qi_ (tmp3.size());
+    Qi_.setConstant(2.0);
+    Qi_ *= tmp3.asDiagonal();
+    Qi_ *= tmp4.asDiagonal();
+    auto Qi__ = Qi_.asDiagonal();
+    Sparse Qi (Qi__);
+    Sparse Pi (Pi_);
+
+    if (index == 1) {
+        // Compute delta_rho_1
+        // Equation 12
+        Vector nabla_l_0 = this->compute_GwLi(0);
+        u->drho = dt * -nabla_l_0;
+        
+        // Compute delta_lambda_1
+        // Equation 13
+        Vector nabla_rho_1 = this->compute_GwRhoi(1);
+        // uleft should never be null here!
+        assert(uleft != nullptr);
+        Vector delta_lambda_0 = uleft->dlambda;
+        Vector delta_rho_1 = u->drho;
+        // Solve for delta_lambda_1
+        u->dlambda = dt * (-nabla_rho_1 - delta_lambda_0 / dt + Qi * delta_rho_1);
+    
+        // Compute delta_m
+        // Equation 9
+        Vector nabla_m_i = this->compute_GwMi(index);
+        // Setup Ax = b system
+        Vector b = -nabla_m_i - K.transpose() * u->dlambda;
+        
+        // Solve Pi x = b
+        u->dm = b * Pi.cwiseInverse();
+    } else {
+        // Compute delta_lambda_i
+        // Equation 24
+        Vector nabla_m_i = this->compute_GwMi(index);
+        Vector nabla_lambda_i = this->compute_GwLi(index);
+        Vector nabla_rho_i = this->compute_GwRhoi(index);
+        Vector delta_lambda_im1;
+        if (uleft == nullptr) {
+            delta_lambda_im1 = Vector(u->dlambda.size());
+            delta_lambda_im1.setZero();
+        } else {
+            delta_lambda_im1 = uleft->dlambda;
+        }
+        Vector delta_rho_ip1;
+        if (uright == nullptr) {
+            delta_rho_ip1 = Vector(u->drho.size());
+            delta_rho_ip1.setZero();
+        } else {
+            delta_rho_ip1 = uright->drho;
+        }
+        Sparse I (K.size(), K.size());
+        I.setIdentity();
+        Sparse A = -dt * Qi * K * Pi.cwiseInverse() * K.transpose() - I / dt;
+        Vector b = dt * Qi * Pi.cwiseInverse() * nabla_m_i - Qi * delta_rho_ip1 - dt * Qi * nabla_lambda_i - delta_lambda_im1 / dt - nabla_rho_i;
+        u->dlambda = b * A.cwiseInverse();
+
+        // Compute delta_m
+        // Equation 9
+        if (index != 0 && index != final_index) { // Otherwise delta_m doesn't matter
+            Vector nabla_m_i = this->compute_GwMi(index);
+            // Setup Ax = b system
+            Vector b = -nabla_m_i - K.transpose() * u->dlambda;
+            
+            // Solve Pi x = b
+            u->dm = b * Pi.cwiseInverse();
+        }
+
+        // Compute delta_rho_i
+        if (index != 0) {
+            // Equation 11
+            u->drho = Qi.cwiseInverse() * (-nabla_rho_i - delta_lambda_im1 / dt + u->dlambda / dt);
+        }
+    }
 
     /* no refinement */
     status.SetRFactor(1);
@@ -223,7 +336,11 @@ int MyBraidApp::TriSolve(braid_Vector uleft_, braid_Vector uright_,
 int MyBraidApp::Init(double t, braid_Vector *u_ptr_) {
     BraidVector **u_ptr = (BraidVector **) u_ptr_;
 
-    // TODO
+    Vector dm(mspace + 2);
+    Vector drho(mspace + 1);
+    Vector dlambda(mspace);
+
+    *u_ptr = new BraidVector(dm, drho, dlambda);
 
     return 0;
 }
@@ -233,8 +350,12 @@ int MyBraidApp::Init(double t, braid_Vector *u_ptr_) {
 int MyBraidApp::Clone(braid_Vector u_, braid_Vector *v_ptr_) {
     BraidVector *u = (BraidVector *) u_;
     BraidVector **v_ptr = (BraidVector **) v_ptr_;
+    
+    // TODO: maybe?:
+    // delete *v_ptr;
 
-    // TODO
+    *v_ptr = new BraidVector(u->dm, u->drho, u->dlambda);
+    (*v_ptr)->index = u->index;
 
     return 0;
 }
@@ -255,7 +376,9 @@ int MyBraidApp::Sum(double alpha, braid_Vector x_, double beta,
     BraidVector *y = (BraidVector *) y_;
     BraidVector *x = (BraidVector *) x_;
 
-    // TODO
+    y->dm = alpha * x->dm + beta * y->dm;
+    y->drho = alpha * x->drho + beta * y->drho;
+    y->dlambda = alpha * x->dlambda + beta * y->dlambda;
 
     return 0;
 }
@@ -265,7 +388,7 @@ int MyBraidApp::Sum(double alpha, braid_Vector x_, double beta,
 int MyBraidApp::SpatialNorm(braid_Vector u_, double *norm_ptr) {
     BraidVector *u = (BraidVector *) u_;
 
-    // TODO
+    *norm_ptr = sqrt(u->dlambda.squaredNorm() + u->dm.squaredNorm() + u->drho.squaredNorm());
 
     return 0;
 }
@@ -281,6 +404,8 @@ int MyBraidApp::Access(braid_Vector u_, BraidAccessStatus &astatus) {
     astatus.GetDone(&done);
     if (done) {
         int j;
+
+        // TODO: Send drho dlambda and dm (along with the index) to the main process in MPI
 
         astatus.GetTIndex(&index);
 
@@ -305,33 +430,64 @@ int MyBraidApp::Access(braid_Vector u_, BraidAccessStatus &astatus) {
 /*------------------------------------*/
 
 int MyBraidApp::BufSize(int *size_ptr, BraidBufferStatus &bstatus) {
-    // *size_ptr = 3 * mspace * sizeof(double);
-    // TODO
+    // sizeof(index) + sizeof(drho) + sizeof(dlambda) + sizeof(dm)
+    *size_ptr = sizeof(int) + (mspace + 1) * sizeof(double) + mspace * sizeof(double) + (mspace + 2) * sizeof(double);
     return 0;
 }
 
 /*------------------------------------*/
 
-int MyBraidApp::BufPack(braid_Vector u_, void *buffer,
+int MyBraidApp::BufPack(braid_Vector u_, void *buffer_,
                BraidBufferStatus &bstatus) {
     BraidVector *u = (BraidVector *) u_;
+    int *buffer = (int *) buffer;
+    
+    *(buffer++) = u->index;
+
     double *dbuffer = (double *) buffer;
 
-    // TODO
+    for (int i = 0; i < mspace + 1; i++, dbuffer++) {
+        *dbuffer = u->drho[i];
+    }
 
-    // bstatus.SetSize(3 * mspace * sizeof(double));
+    for (int i = 0; i < mspace; i++, dbuffer++) {
+        *dbuffer = u->dlambda[i];
+    }
+
+    for (int i = 0; i < mspace + 2; i++, dbuffer++) {
+        *dbuffer = u->dm[i];
+    }
+
+    bstatus.SetSize(sizeof(int) + (mspace + 1) * sizeof(double) + mspace * sizeof(double) + (mspace + 2) * sizeof(double));
 
     return 0;
 }
 
 /*------------------------------------*/
 
-int MyBraidApp::BufUnpack(void *buffer, braid_Vector *u_ptr_,
+int MyBraidApp::BufUnpack(void *buffer_, braid_Vector *u_ptr_,
                  BraidBufferStatus &bstatus) {
     BraidVector **u_ptr = (BraidVector **) u_ptr_;
+    
+    int *buffer = (int *) buffer_;
 
-    // TODO
-    bstatus.SetSize(3 * mspace * sizeof(double));
+    (*u_ptr)->index = *(buffer++);
+
+    double *dbuffer = (double *) buffer;
+
+    for (int i = 0; i < mspace + 1; i++, dbuffer++) {
+        (*u_ptr)->drho[i] = *dbuffer;
+    }
+
+    for (int i = 0; i < mspace; i++, dbuffer++) {
+        (*u_ptr)->dlambda[i] = *dbuffer;
+    }
+
+    for (int i = 0; i < mspace + 2; i++, dbuffer++) {
+        (*u_ptr)->dm[i] = *dbuffer;
+    }
+
+    bstatus.SetSize(sizeof(int) + (mspace + 1) * sizeof(double) + mspace * sizeof(double) + (mspace + 2) * sizeof(double));
 
     return 0;
 }

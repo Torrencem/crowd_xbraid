@@ -37,7 +37,7 @@ d_space = 1/space_steps;
 %q(space_steps * (time_steps + 3/2) + 1 : space_steps * (time_steps + 2)) = zeros(space_steps/2, 1) + 0.1;
 
 q(1:space_steps) = arrayfun(@(x) 0.8*expodist(x, 0.3) + 0.3*expodist(x, 0.7), 0:1/(space_steps-1):1);
-q(space_steps * (time_steps + 1) + 1: space_steps * (time_steps + 2)) = -1*arrayfun(@(x) 0.1*expodist(x, 0.3) + 0.8*expodist(x, 0.7), 0:1/(space_steps-1):1);
+q(space_steps * (time_steps + 1) + 1: space_steps * (time_steps + 2)) = -1*arrayfun(@(x) 0.3*expodist(x, 0.3) + 0.8*expodist(x, 0.7), 0:1/(space_steps-1):1);
 
 q = q * (1/d_time);
 
@@ -161,7 +161,7 @@ function A = get_A_hat(m, rho)
     vec_1 = 2 * As' * At * (1./rho);
     vec_2 = 2 * At' * As * (m.^2);
     vec_3 = 1./(rho.^3);
-    A = blkdiag(diag(vec_1), diag(vec_2) * diag(vec_3));
+    A = spdiags([vec_1;vec_2.*vec_3],0,length(vec_1)+length(vec_2),length(vec_1)+length(vec_2));
 end
 
 function GwL = get_GwL(m, rho, lambda)
@@ -169,8 +169,8 @@ function GwL = get_GwL(m, rho, lambda)
     global At
     global D1
     global D2
-    GmL = 2 * diag(m) * As' * At * (1./rho) + D1' * lambda;
-    GrhoL = -diag(1./(rho.^2)) * At' * As * (m.^2) + D2' * lambda;
+    GmL = 2 * spdiags(m,0,length(m),length(m)) * As' * At * (1./rho) + D1' * lambda;
+    GrhoL = -spdiags(1./(rho.^2),0,length(rho),length(rho)) * At' * As * (m.^2) + D2' * lambda;
     GwL = [GmL; GrhoL];
 end
 
@@ -187,7 +187,7 @@ function reward = reward(x, dm, drho, dlambda)
     newm = m + x * dm;
     newrho = rho + x * drho;
     newlambda = lambda + x * dlambda;
-    recalc_matrices(newm, newrho)
+    %recalc_matrices(newm, newrho)
     b = -[get_GwL(newm, newrho, newlambda); get_GlambdaL(newm, newrho)];
     reward = norm(b);
 end
