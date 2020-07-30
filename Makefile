@@ -139,6 +139,10 @@ model_problem_pp: src/model_problem.cpp $(BRAID_LIB_FILE)
 	@echo "Building" $@ "..."
 	$(MPICXX) $(CXXFLAGS) -L. -llapacke -llapack -lopenblas -lgfortran $(BRAID_FLAGS) -o model_problem_pp src/model_problem.cpp $(BRAID_LIB_FILE) $(LFLAGS) $(EXTRAFLAGS)
 
+crowd_horesh_xbraid: src/crowd_horesh_xbraid.cpp
+	@echo "Building" $@ "..."
+	$(MPICXX) $(CXXFLAGS) -L. -llapacke -llapack -lopenblas -lgfortran $(BRAID_FLAGS) -o crowd_horesh_xbraid src/crowd_horesh_xbraid.cpp -I $(EIGEN_DIR) $(BRAID_LIB_FILE) $(LFLAGS) $(EXTRAFLAGS)
+
 crowd_horesh: src/crowd_horesh.cpp
 	@echo "Building" $@ "..."
 	clang++ $(CXXFLAGS) -o crowd_horesh src/crowd_horesh.cpp -I $(EIGEN_DIR) $(EXTRAFLAGS) -Wextra -std=c++14

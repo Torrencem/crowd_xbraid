@@ -47,9 +47,6 @@
 #include "tribraid.hpp"
 #include "braid_test.h"
 #define PI 3.14159265
-#define g(dt, dx) dt / (2 * dx)
-//#define g(dt,dx) 0.0
-#define b(dt, dx, nu) nu *dt / (dx * dx)
 #define TAG_WORKER_RESULT 42
 #define TYPE_RHO 2
 #define TYPE_LAMBDA 3
@@ -325,9 +322,10 @@ int MyBraidApp::TriSolve(braid_Vector uleft_, braid_Vector uright_,
         } else {
             delta_rho_ip1 = uright->drho;
         }
-        Sparse I (K.size(), K.size());
+        Sparse I (K.rows(), K.cols());
         I.setIdentity();
-        Sparse A = -dt * Qi * K * Pi.cwiseInverse() * K.transpose() - I / dt;
+        Sparse A = -dt * Qi * K * Pi.cwiseInverse() * K.transpose();
+        A -= I / dt;
         Vector b = dt * Qi * K * Pi.cwiseInverse() * nabla_m_i - Qi * delta_rho_ip1 - dt * Qi * nabla_lambda_i - delta_lambda_im1 / dt - nabla_rho_i;
         u->dlambda = b * A.cwiseInverse();
 
@@ -426,7 +424,6 @@ int MyBraidApp::Access(braid_Vector u_, BraidAccessStatus &astatus) {
 
     int done, index;
 
-    /* Print solution to file if simulation is over */
     astatus.GetDone(&done);
     if (done) {
         astatus.GetTIndex(&index);
@@ -655,7 +652,7 @@ int main(int argc, char *argv[]) {
     }
     app.q[app.q.size() - 1] = q_val / d_time;
 
-    app.K = Vector(mspace, mspace + 1);
+    app.K = Sparse(mspace, mspace + 1);
 
     Sparse D1 = get_derivative_matrix_space(mspace, ntime, d_time);
     Sparse D2 = get_derivative_matrix_time(mspace, ntime, d_time);
@@ -746,6 +743,7 @@ int main(int argc, char *argv[]) {
                     dm[index] = dm_val;
                 }
                 num_received++;
+                free(buffer);
             }
             // Compute global new m, rho, and lambda using line search etc.
             Vector drho_long (app.rho.size() * app.rho[0].size());
