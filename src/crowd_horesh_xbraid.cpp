@@ -165,21 +165,13 @@ int MyBraidApp::TriResidual(braid_Vector uleft_, braid_Vector uright_,
     BraidVector *uleft = (BraidVector *) uleft_;
     BraidVector *uright = (BraidVector *) uright_;
     BraidVector *f = (BraidVector *) f_;
-    // r is the output vector in which to put the residual
     BraidVector *r = (BraidVector *) r_;
 
-    Vector drho(mspace);
-    Vector dm(mspace);
-    Vector dlambda(mspace);
-
     double t, tprev, tnext, dt;
-    int level, index, final_index;
+    int level;
 
     status.GetTriT(&t, &tprev, &tnext);
     status.GetLevel(&level);
-    status.GetTIndex(&index);
-    status.GetNTPoints(&final_index);
-    final_index -= 1;
 
     /* Get the time-step size */
     if (t < tnext) {
@@ -187,6 +179,41 @@ int MyBraidApp::TriResidual(braid_Vector uleft_, braid_Vector uright_,
     } else {
         dt = t - tprev;
     }
+    
+    // TODO
+
+    return 0;
+}
+
+/*------------------------------------*/
+
+/* Solve A(u) = f */
+
+int MyBraidApp::TriSolve(braid_Vector uleft_, braid_Vector uright_,
+                braid_Vector fleft_, braid_Vector fright_, braid_Vector f_,
+                braid_Vector u_, BraidTriStatus &status) {
+    BraidVector *uleft = (BraidVector *) uleft_;
+    BraidVector *uright = (BraidVector *) uright_;
+    BraidVector *f = (BraidVector *) f_;
+    BraidVector *u = (BraidVector *) u_;
+    BraidVector *fleft = (BraidVector *) fleft_;
+    BraidVector *fright = (BraidVector *) fright_;
+
+    double t, tprev, tnext, dt;
+
+    /* Get the time-step size */
+    status.GetTriT(&t, &tprev, &tnext);
+    if (t < tnext) {
+        dt = tnext - t;
+    } else {
+        dt = t - tprev;
+    }
+    
+    int index, final_index;
+
+    status.GetTIndex(&index);
+    status.GetNTPoints(&final_index);
+    final_index -= 1;
 
     Sparse X ((mspace + 1), mspace);
     
@@ -232,7 +259,7 @@ int MyBraidApp::TriResidual(braid_Vector uleft_, braid_Vector uright_,
         // Compute delta_rho_1
         // Equation 12
         Vector nabla_l_0 = this->compute_GwLi(0);
-        drho = dt * -nabla_l_0;
+        u->drho = dt * -nabla_l_0;
         
         // Compute delta_lambda_1
         // Equation 13
@@ -240,18 +267,18 @@ int MyBraidApp::TriResidual(braid_Vector uleft_, braid_Vector uright_,
         // uleft should never be null here!
         assert(uleft != nullptr);
         Vector delta_lambda_0 = uleft->dlambda;
-        Vector delta_rho_1 = drho;
+        Vector delta_rho_1 = u->drho;
         // Solve for delta_lambda_1
-        dlambda = dt * (-nabla_rho_1 - delta_lambda_0 / dt + Qi * delta_rho_1);
+        u->dlambda = dt * (-nabla_rho_1 - delta_lambda_0 / dt + Qi * delta_rho_1);
     
         // Compute delta_m
         // Equation 9
         Vector nabla_m_i = this->compute_GwMi(index);
         // Setup Ax = b system
-        Vector b = -nabla_m_i - K.transpose() * dlambda;
+        Vector b = -nabla_m_i - K.transpose() * u->dlambda;
         
         // Solve Pi x = b
-        dm = b * Pi.cwiseInverse();
+        u->dm = b * Pi.cwiseInverse();
     } else {
         // Compute delta_lambda_i
         // Equation 24
@@ -260,14 +287,14 @@ int MyBraidApp::TriResidual(braid_Vector uleft_, braid_Vector uright_,
         Vector nabla_rho_i = this->compute_GwRhoi(index);
         Vector delta_lambda_im1;
         if (uleft == nullptr) {
-            delta_lambda_im1 = Vector(dlambda.size());
+            delta_lambda_im1 = Vector(u->dlambda.size());
             delta_lambda_im1.setZero();
         } else {
             delta_lambda_im1 = uleft->dlambda;
         }
         Vector delta_rho_ip1;
         if (uright == nullptr) {
-            delta_rho_ip1 = Vector(drho.size());
+            delta_rho_ip1 = Vector(u->drho.size());
             delta_rho_ip1.setZero();
         } else {
             delta_rho_ip1 = uright->drho;
@@ -276,59 +303,25 @@ int MyBraidApp::TriResidual(braid_Vector uleft_, braid_Vector uright_,
         I.setIdentity();
         Sparse A = -dt * Qi * K * Pi.cwiseInverse() * K.transpose() - I / dt;
         Vector b = dt * Qi * Pi.cwiseInverse() * nabla_m_i - Qi * delta_rho_ip1 - dt * Qi * nabla_lambda_i - delta_lambda_im1 / dt - nabla_rho_i;
-        dlambda = b * A.cwiseInverse();
+        u->dlambda = b * A.cwiseInverse();
 
         // Compute delta_m
         // Equation 9
         if (index != 0 && index != final_index) { // Otherwise delta_m doesn't matter
             Vector nabla_m_i = this->compute_GwMi(index);
             // Setup Ax = b system
-            Vector b = -nabla_m_i - K.transpose() * dlambda;
+            Vector b = -nabla_m_i - K.transpose() * u->dlambda;
             
             // Solve Pi x = b
-            dm = b * Pi.cwiseInverse();
+            u->dm = b * Pi.cwiseInverse();
         }
 
         // Compute delta_rho_i
         if (index != 0) {
             // Equation 11
-            drho = Qi.cwiseInverse() * (-nabla_rho_i - delta_lambda_im1 / dt + dlambda / dt);
+            u->drho = Qi.cwiseInverse() * (-nabla_rho_i - delta_lambda_im1 / dt + u->dlambda / dt);
         }
     }
-
-      
-    // put the residual in r
-    r = new BraidVector(dm, drho, dlambda);
-    r->index = index;
-
-    return 0;
-}
-
-/*------------------------------------*/
-
-/* Solve A(u) = f */
-
-int MyBraidApp::TriSolve(braid_Vector uleft_, braid_Vector uright_,
-                braid_Vector fleft_, braid_Vector fright_, braid_Vector f_,
-                braid_Vector u_, BraidTriStatus &status) {
-    BraidVector *uleft = (BraidVector *) uleft_;
-    BraidVector *uright = (BraidVector *) uright_;
-    BraidVector *f = (BraidVector *) f_;
-    BraidVector *u = (BraidVector *) u_;
-    BraidVector *fleft = (BraidVector *) fleft_;
-    BraidVector *fright = (BraidVector *) fright_;
-
-    double t, tprev, tnext, dt;
-
-    /* Get the time-step size */
-    status.GetTriT(&t, &tprev, &tnext);
-    if (t < tnext) {
-        dt = tnext - t;
-    } else {
-        dt = t - tprev;
-    }
-
-    // TODO
 
     /* no refinement */
     status.SetRFactor(1);
