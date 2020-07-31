@@ -64,6 +64,19 @@
 
 // #include "lapacke.h"
 
+Sparse nonzeroCwiseInverse(const Sparse &a) {
+    auto m2 = Sparse (a.rows(), a.cols());
+
+    // For each non-zero entry in a
+    for (int k = 0; k < a.outerSize(); k++)
+        for (Sparse::InnerIterator it(a, k); it; ++it) {
+            if (it.value() != 0) m2.insert(it.row(), it.col())
+                = 1/it.value();
+    }
+    return m2;
+}
+
+
 /*--------------------------------------------------------------------------
  * My App and Vector structures
  *--------------------------------------------------------------------------*/
@@ -408,7 +421,7 @@ int MyBraidApp::TriSolve(braid_Vector uleft_, braid_Vector uright_,
     auto Qi__ = Qi_.asDiagonal();
     Sparse Qi (Qi__);
     Sparse Pi (Pi_);
-
+    
     if (index == 1) {
         // Compute delta_rho_1
         // Equation 12
@@ -417,7 +430,7 @@ int MyBraidApp::TriSolve(braid_Vector uleft_, braid_Vector uright_,
         
         // Compute delta_lambda_1
         // Equation 13
-        Vector nabla_rho_1 = this->compute_GwRhoi(1);
+        Vector nabla_rho_1 = this->compute_GwRhoi(0);
         // uleft should never be null here!
         assert(uleft != nullptr);
         Vector delta_lambda_0 = uleft->dlambda;
@@ -437,46 +450,43 @@ int MyBraidApp::TriSolve(braid_Vector uleft_, braid_Vector uright_,
     } else {
         // Compute delta_lambda_i
         // Equation 24
-        Vector nabla_m_i = this->compute_GwMi(index);
-        Vector nabla_lambda_i = this->compute_GwLi(index);
-        Vector nabla_rho_i = this->compute_GwRhoi(index);
-        Vector delta_lambda_im1;
-        if (uleft == nullptr) {
-            delta_lambda_im1 = Vector(u->dlambda.size());
-            delta_lambda_im1.setZero();
-        } else {
+        if (index != 0){
+            Vector nabla_m_i = this->compute_GwMi(index - 1);
+            Vector nabla_lambda_i = this->compute_GwLi(index);
+            Vector nabla_rho_i = this->compute_GwRhoi(index - 1);
+            Vector delta_lambda_im1;
             delta_lambda_im1 = uleft->dlambda;
-        }
-        Vector delta_rho_ip1;
-        if (uright == nullptr) {
-            delta_rho_ip1 = Vector(u->drho.size());
-            delta_rho_ip1.setZero();
+            Vector delta_rho_ip1;
+            if (uright == nullptr) {
+                delta_rho_ip1 = Vector(u->drho.size());
+                delta_rho_ip1.setZero();
+            } else {
+                delta_rho_ip1 = uright->drho;
+            }
+            Sparse I (DLAMBDA_LEN_SPACE, DLAMBDA_LEN_SPACE);
+            I.setIdentity();
+            Sparse A = -dt * Qi * K * nonzeroCwiseInverse(Pi) * K.transpose();
+            A -= I / dt;
+            Vector b = dt * Qi * K * nonzeroCwiseInverse(Pi) * nabla_m_i - Qi * delta_rho_ip1 - dt * Qi * nabla_lambda_i - delta_lambda_im1 / dt - nabla_rho_i;
+            u->dlambda = nonzeroCwiseInverse(A) * b;
+            u->drho = nonzeroCwiseInverse(Qi) * (-nabla_rho_i - delta_lambda_im1 / dt + u->dlambda / dt);
+    
+            if (index != final_index) { // Otherwise delta_m doesn't matter
+                Vector nabla_m_i = this->compute_GwMi(index);
+                // Setup Ax = b system
+                Vector b = -nabla_m_i - K.transpose() * u->dlambda;
+            
+                // Solve Pi x = b
+                u->dm = nonzeroCwiseInverse(Pi) * b;
+            }
         } else {
-            delta_rho_ip1 = uright->drho;
+            Vector nabla_lambda_0 = this->compute_GwLi(0);
+            Vector dlambda_1 = uright->dlambda;
+            Vector nabla_rho_1 = this->compute_GwRhoi(0);
+            u->dlambda = dt * (dt * Qi * nabla_lambda_0 + dlambda_1 / dt - nabla_rho_1);
         }
-        Sparse I (DLAMBDA_LEN_SPACE, DLAMBDA_LEN_SPACE);
-        I.setIdentity();
-        Sparse A = -dt * Qi * K * Pi.cwiseInverse() * K.transpose();
-        A -= I / dt;
-        Vector b = dt * Qi * K * Pi.cwiseInverse() * nabla_m_i - Qi * delta_rho_ip1 - dt * Qi * nabla_lambda_i - delta_lambda_im1 / dt - nabla_rho_i;
-        u->dlambda = A.cwiseInverse() * b;
-
         // Compute delta_m
         // Equation 9
-        if (index != 0 && index != final_index) { // Otherwise delta_m doesn't matter
-            Vector nabla_m_i = this->compute_GwMi(index);
-            // Setup Ax = b system
-            Vector b = -nabla_m_i - K.transpose() * u->dlambda;
-            
-            // Solve Pi x = b
-            u->dm = Pi.cwiseInverse() * b;
-        }
-
-        // Compute delta_rho_i
-        if (index != 0) {
-            // Equation 11
-            u->drho = Qi.cwiseInverse() * (-nabla_rho_i - delta_lambda_im1 / dt + u->dlambda / dt);
-        }
     }
 
     /* no refinement */
@@ -497,8 +507,8 @@ int MyBraidApp::Init(double t, braid_Vector *u_ptr_) {
     Vector dlambda(DLAMBDA_LEN_SPACE);
 
     dm.setConstant(0.0);
-    drho.setConstant(0.1);
-    dlambda.setConstant(0.1);
+    drho.setConstant(0.0);
+    dlambda.setConstant(0.0);
 
     *u_ptr = new BraidVector(dm, drho, dlambda);
 
@@ -561,6 +571,8 @@ int MyBraidApp::Access(braid_Vector u_, BraidAccessStatus &astatus) {
     int done, index;
 
     std::cout << "drho is " << u->drho << std::endl;
+    std::cout << "dm is " << u->dm << std::endl;
+    std::cout << "dlambda is " << u->dlambda << std::endl;
 
     astatus.GetDone(&done);
     if (done) {
@@ -696,18 +708,18 @@ int main(int argc, char *argv[]) {
 
     /* Define space domain. Space domain is between 0 and 1, mspace defines the
      * number of steps */
-    mspace = 20;
-    ntime = 32;
+    mspace = 4;
+    ntime = 4;
 
     /* Define some Braid parameters */
     max_levels = 1;
     min_coarse = 1;
     nrelax = 1;
-    nrelaxc = 10;
-    maxiter = 50;
+    nrelaxc = 1;
+    maxiter = 1;
     cfactor = 2;
     tol = 1.0e-6;
-    access_level = 2;
+    access_level = 1;
     print_level = 2;
 
     /* Define the space step */
@@ -745,7 +757,7 @@ int main(int argc, char *argv[]) {
 
     /* Parallel-in-time TriMGRIT simulation */
     time = 1.0;
-    int iters = 3;
+    int iters = 1;
 
     double d_time = time / ntime;
 
