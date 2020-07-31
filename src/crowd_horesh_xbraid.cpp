@@ -369,7 +369,17 @@ int MyBraidApp::TriSolve(braid_Vector uleft_, braid_Vector uright_,
     }
     
     // Compute Qi and Pi
-    Vector tmp1 = rhoi.cwiseInverse() + rhoip1.cwiseInverse();
+    // Vector tmp1 = rhoi.cwiseInverse() + rhoip1.cwiseInverse();
+    Vector tmp1(DRHO_LEN_SPACE);
+    tmp1.setZero();
+    if (index < DRHO_LEN_TIME) {
+        // Able to add rhoi
+        tmp1 += rho[index].cwiseInverse();
+    }
+    if (index < DRHO_LEN_TIME - 1) {
+        // Able to add rhoip1
+        tmp1 += rho[index + 1].cwiseInverse();
+    }
     Vector tmp1_ = X * tmp1;
     auto Pi_ = 2.0 * (tmp1_).asDiagonal();
     assert(mi.cwiseProduct(mi).size() == mim1.cwiseProduct(mim1).size());
