@@ -83,6 +83,17 @@ class BraidVector
 
     BraidVector(Vector dm_, Vector drho_, Vector dlambda_) : dm(dm_), drho(drho_), dlambda(dlambda_) { }
 
+    BraidVector(int mspace) {
+        this->dm = Vector(DM_LEN_SPACE);
+        this->dm.setZero();
+        
+        this->drho = Vector(DRHO_LEN_SPACE);
+        this->drho.setZero();
+        
+        this->dlambda = Vector(DLAMBDA_LEN_SPACE);
+        this->dlambda.setZero();
+    }
+
     virtual ~BraidVector() { };
 };
 
@@ -225,10 +236,9 @@ int MyBraidApp::TriResidual(braid_Vector uleft_, braid_Vector uright_,
 
     Sparse X ((mspace + 1), mspace);
     
-    X.insert(0, 0) = 0.25;
-    for (int i = 1; i < mspace + 1; i++) {
+    for (int i = 0; i < mspace; i++) {
         X.insert(i, i) = 0.25;
-        X.insert(i - 1, i) = 0.25;
+        X.insert(i + 1, i) = 0.25;
     }
 
     Vector mi = m[index];
@@ -245,25 +255,48 @@ int MyBraidApp::TriResidual(braid_Vector uleft_, braid_Vector uright_,
     
     // Compute Qi and Pi
     Vector tmp1 = rhoi.cwiseInverse() + rhoip1.cwiseInverse();
-    auto Pi_ = 2.0 * ((X * tmp1).eval()).asDiagonal();
-    Vector tmp2 = mi * mi + mim1 * mim1;
+    Vector tmp1_ = X * tmp1;
+    auto Pi_ = 2.0 * (tmp1_).asDiagonal();
+    assert(mi.cwiseProduct(mi).size() == mim1.cwiseProduct(mim1).size());
+    Vector tmp2 = mi.cwiseProduct(mi) + mim1.cwiseProduct(mim1);
     Vector tmp3 = rhoi.cwiseProduct(rhoi.cwiseProduct(rhoi)).cwiseInverse();
     Vector tmp4 = X.transpose() * tmp2;
     Vector Qi_ (tmp3.size());
     Qi_.setConstant(2.0);
-    Qi_ *= tmp3.asDiagonal();
-    Qi_ *= tmp4.asDiagonal();
+    Qi_ = Qi_.cwiseProduct(tmp3).cwiseProduct(tmp4);
     auto Qi__ = Qi_.asDiagonal();
     Sparse Qi (Qi__);
     Sparse Pi (Pi_);
 
     Vector nabla_m_i = this->compute_GwMi(index);
-    Vector nabla_rho_i = this->compute_GwMi(index);
+    Vector nabla_rho_i = this->compute_GwRhoi(index);
     Vector nabla_lambda_i = this->compute_GwLi(index);
 
-    r->dm = Pi * f->dm + K.transpose() * f->dlambda + nabla_m_i;
-    r->drho = Qi * f->drho + uleft->dlambda / dt - f->dlambda / dt + nabla_rho_i;
-    r->dlambda = K * f->dm + uright->drho / dt - f->drho / dt + nabla_lambda_i;
+    Vector dlambda_left(DLAMBDA_LEN_SPACE);
+    if (uleft != nullptr) {
+        dlambda_left = uleft->dlambda;
+    } else {
+        dlambda_left.setZero();
+    }
+
+    Vector drho_right(DRHO_LEN_SPACE);
+    if (uright != nullptr) {
+        drho_right = uright->drho;
+    } else {
+        drho_right.setZero();
+    }
+    
+    if (f == nullptr) {
+        BraidVector f(mspace);
+        r->dm = Pi * f.dm + K.transpose() * f.dlambda + nabla_m_i;
+        Vector tmp1 = Qi * f.drho + dlambda_left / dt - f.dlambda / dt;
+        r->drho = tmp1 + nabla_rho_i;
+        r->dlambda = K * f.dm + drho_right / dt - f.drho / dt + nabla_lambda_i;
+    } else {
+        r->dm = Pi * f->dm + K.transpose() * f->dlambda + nabla_m_i;
+        r->drho = Qi * f->drho + dlambda_left / dt - f->dlambda / dt + nabla_rho_i;
+        r->dlambda = K * f->dm + drho_right / dt - f->drho / dt + nabla_lambda_i;
+    }
 
     return 0;
 }
@@ -300,31 +333,34 @@ int MyBraidApp::TriSolve(braid_Vector uleft_, braid_Vector uright_,
 
     Sparse X ((mspace + 1), mspace);
     
-    X.insert(0, 0) = 0.25;
-    for (int i = 1; i < mspace; i++) {
+    for (int i = 0; i < mspace; i++) {
         X.insert(i, i) = 0.25;
-        X.insert(i - 1, i) = 0.25;
+        X.insert(i + 1, i) = 0.25;
     }
 
     Vector mi = m[index];
     Vector mim1(mi.size());
-
-    assert(index != 0);
 
     if (index == 0) {
         mim1.setZero();
     } else {
         mim1 = m[index - 1];
     }
-
-    Vector rhoi = rho[index];
+    
+    Vector rhoi;
+    if (index < DRHO_LEN_TIME) {
+        rhoi = rho[index];
+    } else {
+        rhoi = Vector(DRHO_LEN_SPACE);
+        rhoi.setZero();
+    }
     // assert(rhoi.size() == DRHO_LEN_SPACE);
     Vector rhoip1(rhoi.size());
 
-    if (mi.size() != mim1.size()) {
-        printf("What: %ld, %ld, index=%d\n", mi.size(), mim1.size(), index);
-        assert(false);
-    }
+    // if (mi.size() != mim1.size()) {
+    //     printf("What: %ld, %ld, index=%d\n", mi.size(), mim1.size(), index);
+    //     assert(false);
+    // }
 
     if ((unsigned long) index == rho.size() - 1) {
         rhoip1.setZero();
@@ -650,7 +686,8 @@ int main(int argc, char *argv[]) {
     tstop = 1.0;  /* End of time domain*/
 
     /* Set up the app structure */
-    auto app = MyBraidApp(MPI_COMM_WORLD, rank, tstart, tstop, ntime);
+    // ntime + 1 for the 2 extra time points caused by the staggered grid
+    auto app = MyBraidApp(MPI_COMM_WORLD, rank, tstart, tstop, ntime + 1);
     app.myid = rank;
     app.ntime = ntime;
     app.mspace = mspace;
@@ -786,15 +823,17 @@ int main(int argc, char *argv[]) {
             std::vector<Vector> dm(DM_LEN_TIME);
 
             int num_received = 0;
+            int num_messages_expected = ntime * 3;
 
-            while (num_received < DRHO_LEN_TIME * DLAMBDA_LEN_TIME * DM_LEN_TIME) {
+            while (num_received < num_messages_expected) {
                 int type, index;
                 int message_size = sizeof(int) * 2 + sizeof(double) * (mspace + 2);
                 char *buffer = (char *) malloc(message_size);
                 MPI_Recv((void *) buffer, message_size, MPI_BYTE, MPI_ANY_SOURCE, TAG_WORKER_RESULT, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+                printf("received: %d out of %d\n", num_received, num_messages_expected);
                 int *buffer_ = (int *) buffer;
-                type = *(buffer++);
-                index = *(buffer++);
+                type = *(buffer_++);
+                index = *(buffer_++);
                 double *dbuffer = (double *) buffer_;
                 if (type == TYPE_RHO) {
                     Vector drho_val(DRHO_LEN_SPACE);

@@ -7,7 +7,7 @@ if expand('%') == '' && !&modified && line('$') <= 1 && getline(1) == ''
   let s:wipebuf = bufnr('%')
 endif
 set shortmess=aoO
-badd +323 src/crowd_horesh_xbraid.cpp
+badd +354 src/crowd_horesh_xbraid.cpp
 argglobal
 %argdel
 $argadd src/crowd_horesh_xbraid.cpp
@@ -36,12 +36,12 @@ setlocal fml=1
 setlocal fdn=20
 setlocal fen
 silent! normal! zE
-let s:l = 323 - ((16 * winheight(0) + 24) / 48)
+let s:l = 341 - ((12 * winheight(0) + 24) / 48)
 if s:l < 1 | let s:l = 1 | endif
 exe s:l
 normal! zt
-323
-normal! 030|
+341
+normal! 020|
 wincmd w
 argglobal
 if bufexists("src/crowd_horesh_xbraid.cpp") | buffer src/crowd_horesh_xbraid.cpp | else | edit src/crowd_horesh_xbraid.cpp | endif
@@ -54,12 +54,12 @@ setlocal fml=1
 setlocal fdn=20
 setlocal fen
 silent! normal! zE
-let s:l = 686 - ((31 * winheight(0) + 24) / 48)
+let s:l = 729 - ((33 * winheight(0) + 24) / 48)
 if s:l < 1 | let s:l = 1 | endif
 exe s:l
 normal! zt
-686
-normal! 014|
+729
+normal! 037|
 wincmd w
 exe 'vert 1resize ' . ((&columns * 119 + 119) / 238)
 exe 'vert 2resize ' . ((&columns * 118 + 119) / 238)
