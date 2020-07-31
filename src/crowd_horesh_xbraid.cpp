@@ -496,6 +496,10 @@ int MyBraidApp::Init(double t, braid_Vector *u_ptr_) {
     Vector drho(DRHO_LEN_SPACE);
     Vector dlambda(DLAMBDA_LEN_SPACE);
 
+    dm.setConstant(0.0);
+    drho.setConstant(0.1);
+    dlambda.setConstant(0.1);
+
     *u_ptr = new BraidVector(dm, drho, dlambda);
 
     return 0;
@@ -555,6 +559,8 @@ int MyBraidApp::Access(braid_Vector u_, BraidAccessStatus &astatus) {
     BraidVector *u = (BraidVector *) u_;
 
     int done, index;
+
+    std::cout << "drho is " << u->drho << std::endl;
 
     astatus.GetDone(&done);
     if (done) {

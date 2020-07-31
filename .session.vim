@@ -7,16 +7,12 @@ if expand('%') == '' && !&modified && line('$') <= 1 && getline(1) == ''
   let s:wipebuf = bufnr('%')
 endif
 set shortmess=aoO
-badd +911 src/crowd_horesh_xbraid.cpp
+badd +559 src/crowd_horesh_xbraid.cpp
 argglobal
 %argdel
 $argadd src/crowd_horesh_xbraid.cpp
 edit src/crowd_horesh_xbraid.cpp
 set splitbelow splitright
-wincmd _ | wincmd |
-vsplit
-1wincmd h
-wincmd w
 set nosplitbelow
 set nosplitright
 wincmd t
@@ -24,8 +20,6 @@ set winminheight=0
 set winheight=1
 set winminwidth=0
 set winwidth=1
-exe 'vert 1resize ' . ((&columns * 119 + 119) / 238)
-exe 'vert 2resize ' . ((&columns * 118 + 119) / 238)
 argglobal
 setlocal fdm=manual
 setlocal fde=0
@@ -36,34 +30,12 @@ setlocal fml=1
 setlocal fdn=20
 setlocal fen
 silent! normal! zE
-let s:l = 911 - ((25 * winheight(0) + 24) / 48)
+let s:l = 559 - ((40 * winheight(0) + 24) / 48)
 if s:l < 1 | let s:l = 1 | endif
 exe s:l
 normal! zt
-911
-normal! 072|
-wincmd w
-argglobal
-if bufexists("src/crowd_horesh_xbraid.cpp") | buffer src/crowd_horesh_xbraid.cpp | else | edit src/crowd_horesh_xbraid.cpp | endif
-setlocal fdm=manual
-setlocal fde=0
-setlocal fmr={{{,}}}
-setlocal fdi=#
-setlocal fdl=0
-setlocal fml=1
-setlocal fdn=20
-setlocal fen
-silent! normal! zE
-let s:l = 697 - ((24 * winheight(0) + 24) / 48)
-if s:l < 1 | let s:l = 1 | endif
-exe s:l
-normal! zt
-697
-normal! 018|
-wincmd w
-2wincmd w
-exe 'vert 1resize ' . ((&columns * 119 + 119) / 238)
-exe 'vert 2resize ' . ((&columns * 118 + 119) / 238)
+559
+normal! 031|
 tabnext 1
 if exists('s:wipebuf') && getbufvar(s:wipebuf, '&buftype') isnot# 'terminal'
   silent exe 'bwipe ' . s:wipebuf
