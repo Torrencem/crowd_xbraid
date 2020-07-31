@@ -241,25 +241,47 @@ int MyBraidApp::TriResidual(braid_Vector uleft_, braid_Vector uright_,
         X.insert(i + 1, i) = 0.25;
     }
 
-    Vector mi = m[index];
-    Vector mim1(mi.size());
-
-    Vector rhoi = rho[index];
-    Vector rhoip1(rhoi.size());
-
-    if ((unsigned long) index == rho.size() - 1) {
-        rhoip1.setZero();
+    Vector mi;
+    
+    if (index != 0 && index != DM_LEN_TIME + 1) {
+        mi = m[index];
     } else {
-        rhoip1 = rho[index + 1];
+        mi = Vector(DM_LEN_SPACE);
+        mi.setZero();
+    }
+
+    Vector mim1(DM_LEN_SPACE);
+
+    if (index == 0) {
+        mim1.setZero();
+    } else {
+        mim1 = m[index - 1];
     }
     
     // Compute Qi and Pi
-    Vector tmp1 = rhoi.cwiseInverse() + rhoip1.cwiseInverse();
+    // Vector tmp1 = rhoi.cwiseInverse() + rhoip1.cwiseInverse();
+    Vector tmp1(DRHO_LEN_SPACE);
+    tmp1.setZero();
+    if (index != 0) {
+        // Able to add rhoi
+        tmp1 += rho[index].cwiseInverse();
+    }
+    if (index != 0) {
+        // Able to add rhoip1
+        tmp1 += rho[index + 1].cwiseInverse();
+    }
     Vector tmp1_ = X * tmp1;
     auto Pi_ = 2.0 * (tmp1_).asDiagonal();
     assert(mi.cwiseProduct(mi).size() == mim1.cwiseProduct(mim1).size());
     Vector tmp2 = mi.cwiseProduct(mi) + mim1.cwiseProduct(mim1);
-    Vector tmp3 = rhoi.cwiseProduct(rhoi.cwiseProduct(rhoi)).cwiseInverse();
+    Vector tmp3;
+    if (index != 0 && index < DRHO_LEN_TIME) {
+        Vector rhoi = rho[index];
+        tmp3 = rhoi.cwiseProduct(rhoi.cwiseProduct(rhoi)).cwiseInverse();
+    } else {
+        tmp3 = Vector(DRHO_LEN_SPACE);
+        tmp3.setZero();
+    }
     Vector tmp4 = X.transpose() * tmp2;
     Vector Qi_ (tmp3.size());
     Qi_.setConstant(2.0);
@@ -337,9 +359,17 @@ int MyBraidApp::TriSolve(braid_Vector uleft_, braid_Vector uright_,
         X.insert(i, i) = 0.25;
         X.insert(i + 1, i) = 0.25;
     }
+    
+    Vector mi;
+    
+    if (index != 0 && index != DM_LEN_TIME + 1) {
+        mi = m[index];
+    } else {
+        mi = Vector(DM_LEN_SPACE);
+        mi.setZero();
+    }
 
-    Vector mi = m[index];
-    Vector mim1(mi.size());
+    Vector mim1(DM_LEN_SPACE);
 
     if (index == 0) {
         mim1.setZero();
@@ -347,36 +377,15 @@ int MyBraidApp::TriSolve(braid_Vector uleft_, braid_Vector uright_,
         mim1 = m[index - 1];
     }
     
-    Vector rhoi;
-    if (index < DRHO_LEN_TIME) {
-        rhoi = rho[index];
-    } else {
-        rhoi = Vector(DRHO_LEN_SPACE);
-        rhoi.setZero();
-    }
-    // assert(rhoi.size() == DRHO_LEN_SPACE);
-    Vector rhoip1(rhoi.size());
-
-    // if (mi.size() != mim1.size()) {
-    //     printf("What: %ld, %ld, index=%d\n", mi.size(), mim1.size(), index);
-    //     assert(false);
-    // }
-
-    if ((unsigned long) index == rho.size() - 1) {
-        rhoip1.setZero();
-    } else {
-        rhoip1 = rho[index + 1];
-    }
-    
     // Compute Qi and Pi
     // Vector tmp1 = rhoi.cwiseInverse() + rhoip1.cwiseInverse();
     Vector tmp1(DRHO_LEN_SPACE);
     tmp1.setZero();
-    if (index < DRHO_LEN_TIME) {
+    if (index != 0) {
         // Able to add rhoi
         tmp1 += rho[index].cwiseInverse();
     }
-    if (index < DRHO_LEN_TIME - 1) {
+    if (index != 0 && index != (int) rho.size() - 1) {
         // Able to add rhoip1
         tmp1 += rho[index + 1].cwiseInverse();
     }
@@ -384,7 +393,14 @@ int MyBraidApp::TriSolve(braid_Vector uleft_, braid_Vector uright_,
     auto Pi_ = 2.0 * (tmp1_).asDiagonal();
     assert(mi.cwiseProduct(mi).size() == mim1.cwiseProduct(mim1).size());
     Vector tmp2 = mi.cwiseProduct(mi) + mim1.cwiseProduct(mim1);
-    Vector tmp3 = rhoi.cwiseProduct(rhoi.cwiseProduct(rhoi)).cwiseInverse();
+    Vector tmp3;
+    if (index != 0 && index < DRHO_LEN_TIME) {
+        Vector rhoi = rho[index];
+        tmp3 = rhoi.cwiseProduct(rhoi.cwiseProduct(rhoi)).cwiseInverse();
+    } else {
+        tmp3 = Vector(DRHO_LEN_SPACE);
+        tmp3.setZero();
+    }
     Vector tmp4 = X.transpose() * tmp2;
     Vector Qi_ (tmp3.size());
     Qi_.setConstant(2.0);
@@ -548,7 +564,7 @@ int MyBraidApp::Access(braid_Vector u_, BraidAccessStatus &astatus) {
         int message_size = sizeof(int) * 2 + sizeof(double) * (mspace + 2);
         
         // type is TYPE_RHO
-        {
+        if (index != 0) {
         char *buffer = (char *) calloc(message_size, 1);
         int *ibuffer = (int *) buffer;
         *(ibuffer++) = TYPE_RHO;
@@ -574,7 +590,7 @@ int MyBraidApp::Access(braid_Vector u_, BraidAccessStatus &astatus) {
         free(buffer);
         }
         // type is TYPE_M
-        {
+        if (index != 0 && index != DM_LEN_TIME + 1) {
         char *buffer = (char *) calloc(message_size, 1);
         int *ibuffer = (int *) buffer;
         *(ibuffer++) = TYPE_M;
@@ -729,6 +745,8 @@ int main(int argc, char *argv[]) {
 
 
     app.m = std::vector<Vector>();
+    // M doesn't exist at the first time point
+    app.m.push_back(Vector(DM_LEN_SPACE));
     for (int i = 0; i < DM_LEN_TIME; i++) {
         Vector m_val (DM_LEN_SPACE);
         m_val.setConstant(0.0);
@@ -736,6 +754,8 @@ int main(int argc, char *argv[]) {
     }
 
     app.rho = std::vector<Vector>();
+    // Rho doesn't exist at the first time point
+    app.rho.push_back(Vector(DRHO_LEN_SPACE));
     for (int i = 0; i < DRHO_LEN_TIME; i++) {
         Vector rho_val (DRHO_LEN_SPACE);
         rho_val.setConstant(0.5);
@@ -792,17 +812,17 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    for (int i = 0; i < iters; i++) {
-        Vector rho_long (app.rho.size() * app.rho[0].size());
-        for (unsigned long i = 0; i < app.rho.size(); i++) {
-            for (int j = 0; j < app.rho[0].size(); j++) {
-                rho_long[i * app.rho[0].size() + j] = app.rho[i][j];
+    for (int i_ = 0; i_ < iters; i_++) {
+        Vector rho_long ((app.rho.size() - 1) * app.rho[1].size());
+        for (unsigned long i = 1; i < app.rho.size(); i++) {
+            for (int j = 0; j < app.rho[1].size(); j++) {
+                rho_long[(i - 1) * app.rho[1].size() + j] = app.rho[i][j];
             }
         }
-        Vector m_long (app.m.size() * app.m[0].size());
-        for (unsigned long i = 0; i < app.m.size(); i++) {
-            for (int j = 0; j < app.m[0].size(); j++) {
-                m_long[i * app.m[0].size() + j] = app.m[i][j];
+        Vector m_long ((app.m.size() - 1) * app.m[1].size());
+        for (unsigned long i = 1; i < app.m.size(); i++) {
+            for (int j = 0; j < app.m[1].size(); j++) {
+                m_long[(i - 1) * app.m[1].size() + j] = app.m[i][j];
             }
         }
         Vector lambda_long (app.lambda.size() * app.lambda[0].size());
@@ -833,14 +853,14 @@ int main(int argc, char *argv[]) {
             std::vector<Vector> dm(DM_LEN_TIME);
 
             int num_received = 0;
-            int num_messages_expected = ntime * 3;
+            int num_messages_expected = DRHO_LEN_TIME + DLAMBDA_LEN_TIME + DM_LEN_TIME;
 
             while (num_received < num_messages_expected) {
                 int type, index;
                 int message_size = sizeof(int) * 2 + sizeof(double) * (mspace + 2);
                 char *buffer = (char *) malloc(message_size);
                 MPI_Recv((void *) buffer, message_size, MPI_BYTE, MPI_ANY_SOURCE, TAG_WORKER_RESULT, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-                printf("received: %d out of %d\n", num_received, num_messages_expected);
+                // printf("received: %d out of %d\n", num_received, num_messages_expected);
                 int *buffer_ = (int *) buffer;
                 type = *(buffer_++);
                 index = *(buffer_++);
@@ -850,7 +870,7 @@ int main(int argc, char *argv[]) {
                     for (int i = 0; i < DRHO_LEN_SPACE; i++) {
                         drho_val[i] = dbuffer[i];
                     }
-                    drho[index] = drho_val;
+                    drho[index - 1] = drho_val;
                 } else if (type == TYPE_LAMBDA) {
                     Vector dlambda_val(DLAMBDA_LEN_SPACE);
                     for (int i = 0; i < DLAMBDA_LEN_SPACE; i++) {
@@ -862,7 +882,7 @@ int main(int argc, char *argv[]) {
                     for (int i = 0; i < DM_LEN_SPACE; i++) {
                         dm_val[i] = dbuffer[i];
                     }
-                    dm[index] = dm_val;
+                    dm[index - 1] = dm_val;
                 }
                 num_received++;
                 free(buffer);
@@ -887,14 +907,16 @@ int main(int argc, char *argv[]) {
                 }
             }
             double alpha = line_search(dm_long, drho_long, dlambda_long, m_long, rho_long, lambda_long, As, At, D1, D2, q_long, D);
+
+            printf("Line search completed for iteration %d. alpha = %f\n", i_, alpha);
             
-            for (unsigned long i = 0; i < app.m.size(); i++) {
-                app.m[i] += alpha * dm[i];
+            for (unsigned long i = 1; i < app.m.size(); i++) {
+                app.m[i] += alpha * dm[i - 1];
             }
-            for (unsigned long i = 0; i < app.m.size(); i++) {
-                app.rho[i] += alpha * drho[i];
+            for (unsigned long i = 1; i < app.rho.size(); i++) {
+                app.rho[i] += alpha * drho[i - 1];
             }
-            for (unsigned long i = 0; i < app.m.size(); i++) {
+            for (unsigned long i = 0; i < app.lambda.size(); i++) {
                 app.lambda[i] += alpha * dlambda[i];
             }
             // Send global picture of m, rho, and lambda
