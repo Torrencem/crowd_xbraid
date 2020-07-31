@@ -231,6 +231,25 @@ my_SpaceTimeNorm(braid_App      app,
 
 }
 
+double line_search(double (*f)(double)){
+    double a = 0.0;
+    double b = 1.0;
+    double gr = (1.0+sqrt(5.0))/2.0;
+    double c = 1 - 1/gr;
+    double d = 1/gr;
+    while (fabs(c-d) > 0.00001) {
+        if (f(c) < f(d)){
+            b = d;
+        } else {
+            a = c;
+        }
+        c = b - (b - a)/gr;
+        d = a + (b - a)/gr;
+    }
+    return (a+b)/2;
+}
+
+
 /*--------------------------------------------------------------------------
  * Main driver
  *--------------------------------------------------------------------------*/
