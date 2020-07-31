@@ -215,6 +215,22 @@ my_BufUnpack(braid_App          app,
    return 0;
 }
 
+double
+my_SpaceTimeNorm(braid_App      app,
+                 int            time_steps,
+                 braid_Vector   *u_ptr
+                 )
+{
+  double accumulator = 0.0;
+  double norm;
+  for(int i = 0; i < time_steps; i++){
+      my_SpatialNorm(app, u_ptr[i], &norm);
+      accumulator += (norm * norm);
+  } 
+  return sqrt(norm);
+
+}
+
 /*--------------------------------------------------------------------------
  * Main driver
  *--------------------------------------------------------------------------*/
