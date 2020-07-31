@@ -52,6 +52,16 @@
 #define TYPE_LAMBDA 3
 #define TYPE_M 4
 
+#define DM_LEN_SPACE (mspace+1)
+#define DRHO_LEN_SPACE (mspace)
+#define DLAMBDA_LEN_SPACE (mspace)
+#define Q_LEN_SPACE (mspace)
+
+#define DM_LEN_TIME (ntime)
+#define DRHO_LEN_TIME (ntime + 1)
+#define DLAMBDA_LEN_TIME (ntime + 2)
+#define Q_LEN_TIME (ntime + 2)
+
 // #include "lapacke.h"
 
 /*--------------------------------------------------------------------------
@@ -155,21 +165,21 @@ public:
 };
 
 const Vector MyBraidApp::compute_GwMi(int index) {
-    Eigen::Map<Vector> res(this->GmL.data() + (index * (mspace + 2)), mspace + 2);
+    Eigen::Map<Vector> res(this->GmL.data() + (index * DM_LEN_SPACE), DM_LEN_SPACE);
 
     Vector res_(res);
     return res_;
 }
 
 const Vector MyBraidApp::compute_GwLi(int index) {
-    Eigen::Map<Vector> res(this->GlambdaL.data() + (index * mspace), mspace);
+    Eigen::Map<Vector> res(this->GlambdaL.data() + (index * DLAMBDA_LEN_SPACE), DLAMBDA_LEN_SPACE);
 
     Vector res_(res);
     return res_;
 }
 
 const Vector MyBraidApp::compute_GwRhoi(int index) {
-    Eigen::Map<Vector> res(this->GrhoL.data() + (index * (mspace + 1)), mspace + 1);
+    Eigen::Map<Vector> res(this->GrhoL.data() + (index * DRHO_LEN_SPACE), DRHO_LEN_SPACE);
 
     Vector res_(res);
     return res_;
@@ -299,6 +309,8 @@ int MyBraidApp::TriSolve(braid_Vector uleft_, braid_Vector uright_,
     Vector mi = m[index];
     Vector mim1(mi.size());
 
+    assert(index != 0);
+
     if (index == 0) {
         mim1.setZero();
     } else {
@@ -306,7 +318,13 @@ int MyBraidApp::TriSolve(braid_Vector uleft_, braid_Vector uright_,
     }
 
     Vector rhoi = rho[index];
+    // assert(rhoi.size() == DRHO_LEN_SPACE);
     Vector rhoip1(rhoi.size());
+
+    if (mi.size() != mim1.size()) {
+        printf("What: %ld, %ld, index=%d\n", mi.size(), mim1.size(), index);
+        assert(false);
+    }
 
     if ((unsigned long) index == rho.size() - 1) {
         rhoip1.setZero();
@@ -316,14 +334,15 @@ int MyBraidApp::TriSolve(braid_Vector uleft_, braid_Vector uright_,
     
     // Compute Qi and Pi
     Vector tmp1 = rhoi.cwiseInverse() + rhoip1.cwiseInverse();
-    auto Pi_ = 2.0 * ((X * tmp1).eval()).asDiagonal();
-    Vector tmp2 = mi * mi + mim1 * mim1;
+    Vector tmp1_ = X * tmp1;
+    auto Pi_ = 2.0 * (tmp1_).asDiagonal();
+    assert(mi.cwiseProduct(mi).size() == mim1.cwiseProduct(mim1).size());
+    Vector tmp2 = mi.cwiseProduct(mi) + mim1.cwiseProduct(mim1);
     Vector tmp3 = rhoi.cwiseProduct(rhoi.cwiseProduct(rhoi)).cwiseInverse();
     Vector tmp4 = X.transpose() * tmp2;
     Vector Qi_ (tmp3.size());
     Qi_.setConstant(2.0);
-    Qi_ *= tmp3.asDiagonal();
-    Qi_ *= tmp4.asDiagonal();
+    Qi_ = Qi_.cwiseProduct(tmp3).cwiseProduct(tmp4);
     auto Qi__ = Qi_.asDiagonal();
     Sparse Qi (Qi__);
     Sparse Pi (Pi_);
@@ -342,7 +361,8 @@ int MyBraidApp::TriSolve(braid_Vector uleft_, braid_Vector uright_,
         Vector delta_lambda_0 = uleft->dlambda;
         Vector delta_rho_1 = u->drho;
         // Solve for delta_lambda_1
-        u->dlambda = dt * (-nabla_rho_1 - delta_lambda_0 / dt + Qi * delta_rho_1);
+        u->dlambda = dt * (-nabla_rho_1 - delta_lambda_0 / dt);
+        u->dlambda = dt * Qi * delta_rho_1;
     
         // Compute delta_m
         // Equation 9
@@ -351,7 +371,7 @@ int MyBraidApp::TriSolve(braid_Vector uleft_, braid_Vector uright_,
         Vector b = -nabla_m_i - K.transpose() * u->dlambda;
         
         // Solve Pi x = b
-        u->dm = b * Pi.cwiseInverse();
+        u->dm = Pi.diagonal().cwiseInverse().cwiseProduct(b);
     } else {
         // Compute delta_lambda_i
         // Equation 24
@@ -372,12 +392,12 @@ int MyBraidApp::TriSolve(braid_Vector uleft_, braid_Vector uright_,
         } else {
             delta_rho_ip1 = uright->drho;
         }
-        Sparse I (K.rows(), K.cols());
+        Sparse I (DLAMBDA_LEN_SPACE, DLAMBDA_LEN_SPACE);
         I.setIdentity();
         Sparse A = -dt * Qi * K * Pi.cwiseInverse() * K.transpose();
         A -= I / dt;
         Vector b = dt * Qi * K * Pi.cwiseInverse() * nabla_m_i - Qi * delta_rho_ip1 - dt * Qi * nabla_lambda_i - delta_lambda_im1 / dt - nabla_rho_i;
-        u->dlambda = b * A.cwiseInverse();
+        u->dlambda = A.cwiseInverse() * b;
 
         // Compute delta_m
         // Equation 9
@@ -387,7 +407,7 @@ int MyBraidApp::TriSolve(braid_Vector uleft_, braid_Vector uright_,
             Vector b = -nabla_m_i - K.transpose() * u->dlambda;
             
             // Solve Pi x = b
-            u->dm = b * Pi.cwiseInverse();
+            u->dm = Pi.cwiseInverse() * b;
         }
 
         // Compute delta_rho_i
@@ -410,9 +430,9 @@ int MyBraidApp::TriSolve(braid_Vector uleft_, braid_Vector uright_,
 int MyBraidApp::Init(double t, braid_Vector *u_ptr_) {
     BraidVector **u_ptr = (BraidVector **) u_ptr_;
 
-    Vector dm(mspace + 2);
-    Vector drho(mspace + 1);
-    Vector dlambda(mspace);
+    Vector dm(DM_LEN_SPACE);
+    Vector drho(DRHO_LEN_SPACE);
+    Vector dlambda(DLAMBDA_LEN_SPACE);
 
     *u_ptr = new BraidVector(dm, drho, dlambda);
 
@@ -488,7 +508,7 @@ int MyBraidApp::Access(braid_Vector u_, BraidAccessStatus &astatus) {
         *(ibuffer++) = TYPE_RHO;
         *(ibuffer++) = index;
         double *dbuffer = (double *) ibuffer;
-        for (int i = 0; i < mspace + 1; i++) {
+        for (int i = 0; i < DRHO_LEN_SPACE; i++) {
             dbuffer[i] = u->drho[i];
         }
         MPI_Isend((void *) buffer, message_size, MPI_BYTE, 0, TAG_WORKER_RESULT, MPI_COMM_WORLD, &send_request);
@@ -501,7 +521,7 @@ int MyBraidApp::Access(braid_Vector u_, BraidAccessStatus &astatus) {
         *(ibuffer++) = TYPE_LAMBDA;
         *(ibuffer++) = index;
         double *dbuffer = (double *) ibuffer;
-        for (int i = 0; i < mspace; i++) {
+        for (int i = 0; i < DLAMBDA_LEN_SPACE; i++) {
             dbuffer[i] = u->dlambda[i];
         }
         MPI_Isend((void *) buffer, message_size, MPI_BYTE, 0, TAG_WORKER_RESULT, MPI_COMM_WORLD, &send_request);
@@ -514,7 +534,7 @@ int MyBraidApp::Access(braid_Vector u_, BraidAccessStatus &astatus) {
         *(ibuffer++) = TYPE_M;
         *(ibuffer++) = index;
         double *dbuffer = (double *) ibuffer;
-        for (int i = 0; i < mspace + 2; i++) {
+        for (int i = 0; i < DM_LEN_SPACE; i++) {
             dbuffer[i] = u->dm[i];
         }
         MPI_Isend((void *) buffer, message_size, MPI_BYTE, 0, TAG_WORKER_RESULT, MPI_COMM_WORLD, &send_request);
@@ -529,7 +549,7 @@ int MyBraidApp::Access(braid_Vector u_, BraidAccessStatus &astatus) {
 
 int MyBraidApp::BufSize(int *size_ptr, BraidBufferStatus &bstatus) {
     // sizeof(index) + sizeof(drho) + sizeof(dlambda) + sizeof(dm)
-    *size_ptr = sizeof(int) + (mspace + 1) * sizeof(double) + mspace * sizeof(double) + (mspace + 2) * sizeof(double);
+    *size_ptr = sizeof(int) + DRHO_LEN_SPACE * sizeof(double) + DLAMBDA_LEN_SPACE * sizeof(double) + DM_LEN_SPACE * sizeof(double);
     return 0;
 }
 
@@ -544,19 +564,19 @@ int MyBraidApp::BufPack(braid_Vector u_, void *buffer_,
 
     double *dbuffer = (double *) buffer;
 
-    for (int i = 0; i < mspace + 1; i++, dbuffer++) {
+    for (int i = 0; i < DRHO_LEN_SPACE; i++, dbuffer++) {
         *dbuffer = u->drho[i];
     }
 
-    for (int i = 0; i < mspace; i++, dbuffer++) {
+    for (int i = 0; i < DLAMBDA_LEN_SPACE; i++, dbuffer++) {
         *dbuffer = u->dlambda[i];
     }
 
-    for (int i = 0; i < mspace + 2; i++, dbuffer++) {
+    for (int i = 0; i < DM_LEN_SPACE; i++, dbuffer++) {
         *dbuffer = u->dm[i];
     }
 
-    bstatus.SetSize(sizeof(int) + (mspace + 1) * sizeof(double) + mspace * sizeof(double) + (mspace + 2) * sizeof(double));
+    bstatus.SetSize(sizeof(int) + DRHO_LEN_SPACE * sizeof(double) + DLAMBDA_LEN_SPACE * sizeof(double) + DM_LEN_SPACE * sizeof(double));
 
     return 0;
 }
@@ -573,19 +593,19 @@ int MyBraidApp::BufUnpack(void *buffer_, braid_Vector *u_ptr_,
 
     double *dbuffer = (double *) buffer;
 
-    for (int i = 0; i < mspace + 1; i++, dbuffer++) {
+    for (int i = 0; i < DRHO_LEN_SPACE; i++, dbuffer++) {
         (*u_ptr)->drho[i] = *dbuffer;
     }
 
-    for (int i = 0; i < mspace; i++, dbuffer++) {
+    for (int i = 0; i < DLAMBDA_LEN_SPACE; i++, dbuffer++) {
         (*u_ptr)->dlambda[i] = *dbuffer;
     }
 
-    for (int i = 0; i < mspace + 2; i++, dbuffer++) {
+    for (int i = 0; i < DM_LEN_SPACE; i++, dbuffer++) {
         (*u_ptr)->dm[i] = *dbuffer;
     }
 
-    bstatus.SetSize(sizeof(int) + (mspace + 1) * sizeof(double) + mspace * sizeof(double) + (mspace + 2) * sizeof(double));
+    bstatus.SetSize(sizeof(int) + DRHO_LEN_SPACE * sizeof(double) + DLAMBDA_LEN_SPACE * sizeof(double) + DM_LEN_SPACE * sizeof(double));
 
     return 0;
 }
@@ -608,8 +628,8 @@ int main(int argc, char *argv[]) {
 
     /* Define space domain. Space domain is between 0 and 1, mspace defines the
      * number of steps */
-    mspace = 16;
-    ntime = 16;
+    mspace = 100;
+    ntime = 150;
 
     /* Define some Braid parameters */
     max_levels = 2;
@@ -655,8 +675,6 @@ int main(int argc, char *argv[]) {
     core.SetAbsTol(tol);
 
     /* Parallel-in-time TriMGRIT simulation */
-    mspace = 100;
-    ntime = 150;
     time = 1.0;
     int iters = 15;
 
@@ -664,30 +682,30 @@ int main(int argc, char *argv[]) {
 
 
     app.m = std::vector<Vector>();
-    for (int i = 0; i < ntime; i++) {
-        Vector m_val (mspace + 1);
+    for (int i = 0; i < DM_LEN_TIME; i++) {
+        Vector m_val (DM_LEN_SPACE);
         m_val.setConstant(0.0);
         app.m.push_back(m_val);
     }
 
     app.rho = std::vector<Vector>();
-    for (int i = 0; i < ntime + 1; i++) {
-        Vector rho_val (mspace);
+    for (int i = 0; i < DRHO_LEN_TIME; i++) {
+        Vector rho_val (DRHO_LEN_SPACE);
         rho_val.setConstant(0.5);
         app.rho.push_back(rho_val);
     }
 
     app.lambda = std::vector<Vector>();
-    for (int i = 0; i < ntime + 2; i++) {
-        Vector lambda_val (mspace);
+    for (int i = 0; i < DLAMBDA_LEN_TIME; i++) {
+        Vector lambda_val (DLAMBDA_LEN_SPACE);
         lambda_val.setConstant(0.1);
         app.lambda.push_back(lambda_val);
     }
     
-    app.q = std::vector<Vector>(ntime + 2);
+    app.q = std::vector<Vector>(Q_LEN_TIME);
 
     double accumulator = 0.0;
-    Vector q_val (mspace);
+    Vector q_val (Q_LEN_SPACE);
     for (int i = 0; i < mspace; i++) {
         q_val[i] = initial_condition(accumulator);
         accumulator += 1.0 / ((double)mspace - 1.0);
@@ -763,13 +781,13 @@ int main(int argc, char *argv[]) {
         if (rank == 0) {
             // Main processor
             // Receive from access the results of workers' computation
-            std::vector<Vector> drho(ntime + 1);
-            std::vector<Vector> dlambda(ntime + 2);
-            std::vector<Vector> dm(ntime);
+            std::vector<Vector> drho(DRHO_LEN_TIME);
+            std::vector<Vector> dlambda(DLAMBDA_LEN_TIME);
+            std::vector<Vector> dm(DM_LEN_TIME);
 
             int num_received = 0;
 
-            while (num_received < ntime * (ntime + 1) * (ntime + 2)) {
+            while (num_received < DRHO_LEN_TIME * DLAMBDA_LEN_TIME * DM_LEN_TIME) {
                 int type, index;
                 int message_size = sizeof(int) * 2 + sizeof(double) * (mspace + 2);
                 char *buffer = (char *) malloc(message_size);
@@ -779,20 +797,20 @@ int main(int argc, char *argv[]) {
                 index = *(buffer++);
                 double *dbuffer = (double *) buffer_;
                 if (type == TYPE_RHO) {
-                    Vector drho_val(mspace + 1);
-                    for (int i = 0; i < mspace + 1; i++) {
+                    Vector drho_val(DRHO_LEN_SPACE);
+                    for (int i = 0; i < DRHO_LEN_SPACE; i++) {
                         drho_val[i] = dbuffer[i];
                     }
                     drho[index] = drho_val;
                 } else if (type == TYPE_LAMBDA) {
-                    Vector dlambda_val(mspace);
-                    for (int i = 0; i < mspace; i++) {
+                    Vector dlambda_val(DLAMBDA_LEN_SPACE);
+                    for (int i = 0; i < DLAMBDA_LEN_SPACE; i++) {
                         dlambda_val[i] = dbuffer[i];
                     }
                     dlambda[index] = dlambda_val;
                 } else if (type == TYPE_M) {
-                    Vector dm_val(mspace + 2);
-                    for (int i = 0; i < mspace + 2; i++) {
+                    Vector dm_val(DM_LEN_SPACE);
+                    for (int i = 0; i < DM_LEN_SPACE; i++) {
                         dm_val[i] = dbuffer[i];
                     }
                     dm[index] = dm_val;
@@ -884,6 +902,8 @@ int main(int argc, char *argv[]) {
     /* Print runtime to file (for runtime comparisons)*/
     // time = (double)(end - start) / CLOCKS_PER_SEC;
     // printf("Total Run Time: %f s \n", time);
+    
+    printf("Hit the end. TODO: Print out actual results\n");
 
     MPI_Finalize();
 

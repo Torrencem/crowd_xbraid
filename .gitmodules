@@ -1,6 +1,6 @@
 [submodule "xbraid"]
 	path = xbraid
-	url = git@github.com:Torrencem/xbraid.git
+	url = https://github.com/Torrencem/xbraid.git
 	branch = trimgrit_cxx
 [submodule "eigen"]
 	path = eigen

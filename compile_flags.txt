@@ -14,3 +14,4 @@
 -I../openmpi-4.0.4/ompi/include
 ../openmpi-4.0.4/ompi/libmpi.la
 -I./eigen
+-Wno-unused-parameter
