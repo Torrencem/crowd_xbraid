@@ -690,11 +690,11 @@ int main(int argc, char *argv[]) {
 
     /* Define space domain. Space domain is between 0 and 1, mspace defines the
      * number of steps */
-    mspace = 100;
-    ntime = 150;
+    mspace = 20;
+    ntime = 32;
 
     /* Define some Braid parameters */
-    max_levels = 2;
+    max_levels = 1;
     min_coarse = 1;
     nrelax = 1;
     nrelaxc = 10;
@@ -739,7 +739,7 @@ int main(int argc, char *argv[]) {
 
     /* Parallel-in-time TriMGRIT simulation */
     time = 1.0;
-    int iters = 15;
+    int iters = 3;
 
     double d_time = time / ntime;
 
