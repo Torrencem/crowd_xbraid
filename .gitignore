@@ -4,8 +4,8 @@ utils
 model_problem
 model_problem_pp
 model_problem_backwards
-model_problem_upwind
 crowd_horesh_xbraid
+ex-01-mod
 libgfortran.a
 tests
 burger

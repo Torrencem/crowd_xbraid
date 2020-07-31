@@ -131,9 +131,9 @@ model_problem_backwards: src/model_problem.c $(BRAID_LIB_FILE)
 	@echo "Building" $@ "..."
 	$(MPICC) $(CFLAGS) -D MODEL_BACKWARDS -L. -llapacke -llapack -lopenblas -lgfortran $(BRAID_FLAGS) -o model_problem_backwards src/model_problem.c $(BRAID_LIB_FILE) $(LFLAGS) $(EXTRAFLAGS)
 
-model_problem_upwind: src/model_problem_upwind.c $(BRAID_LIB_FILE)
+ex-01-mod: src/ex-01-mod.c $(BRAID_LIB_FILE)
 	@echo "Building" $@ "..."
-	$(MPICC) $(CFLAGS) -L. -llapacke -llapack -lopenblas -lgfortran $(BRAID_FLAGS) -o model_problem_upwind src/model_problem_upwind.c $(BRAID_LIB_FILE) $(LFLAGS) $(EXTRAFLAGS)
+	$(MPICC) $(CFLAGS) -L. -llapacke -llapack -lopenblas -lgfortran $(BRAID_FLAGS) -o ex-01-mod src/ex-01-mod.c $(BRAID_LIB_FILE) $(LFLAGS) $(EXTRAFLAGS)
 
 model_problem_pp: src/model_problem.cpp $(BRAID_LIB_FILE)
 	@echo "Building" $@ "..."

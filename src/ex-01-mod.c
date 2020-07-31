@@ -62,6 +62,10 @@
 
 #include "braid.h"
 
+#define TAG_DATA_TO_MASTER (1)
+#define TAG_LINE_SEARCH_RESULT 3
+#define TAG_US_PREV 4
+
 /*--------------------------------------------------------------------------
  * User-defined routines and structures
  *--------------------------------------------------------------------------*/
@@ -70,6 +74,7 @@
 typedef struct _braid_App_struct
 {
    int       rank;
+   int first_access;
 } my_App;
 
 /* Vector structure can contain anything, and be name anything as well */
@@ -161,17 +166,105 @@ my_SpatialNorm(braid_App     app,
    return 0;
 }
 
+// --- LINE SEARCH STUFF ---
+
+double
+my_Residual(braid_App app,
+            double u,
+            int index) { return 0.0; }
+
+double objective(double alpha, double *us_prev, double *us, int len, braid_App app) {
+    double result = 0.0;
+    for (int i = 0; i < len; i++) {
+        double residual = my_Residual(app, alpha * us_prev[i] + (1 - alpha) * us[i], i);
+        result += residual * residual;
+    }
+    return result;
+}
+
+typedef double (*Objective)(double, double *, double *, int, braid_App);
+
+double line_search(Objective f, double *us_prev, double *us, int len, braid_App app){
+    double a = 0.0;
+    double b = 1.0;
+    double gr = (1.0+sqrt(5.0))/2.0;
+    double c = 1 - 1/gr;
+    double d = 1/gr;
+    while (fabs(c-d) > 0.00001) {
+        if (f(c, us_prev, us, len, app) < f(d, us_prev, us, len, app)){
+            b = d;
+        } else {
+            a = c;
+        }
+        c = b - (b - a)/gr;
+        d = a + (b - a)/gr;
+    }
+    return (a+b)/2;
+}
+
+// --- END LINE SEARCH STUFF ---
+
 int
 my_Access(braid_App          app,
           braid_Vector       u,
           braid_AccessStatus astatus)
 {
    int        index;
+   int num_vectors;
+   int level;
+   MPI_Status status;
+   MPI_Request request;
    
    braid_AccessStatusGetTIndex(astatus, &index);
 
-   // Send results back to main
+   braid_AccessStatusGetLevel(astatus, &level);
 
+   if (level != 0) {
+        return 0;
+   }
+
+   if (app->rank == 0) {
+        // Master process
+        braid_AccessStatusGetNTPoints(astatus, &num_vectors);
+        // Receive all other vectors
+        double *us = (double *) malloc(sizeof(double) * (num_vectors));
+        us[0] = u->value;
+        // Use MPI_Gather instead of this
+        /* for (int i = 1; i < num_vectors; i++) { */
+            /* MPI_Recv(&(us[i]), 1, MPI_DOUBLE, MPI_ANY_SOURCE, TAG_DATA_TO_MASTER + i, MPI_COMM_WORLD, &status); */
+        /* } */
+
+       if (app->first_access) {
+           app->first_access = 0;
+       } else {
+            // Perform a line search
+            double *us_prev = malloc(sizeof(double) * num_vectors);
+            // Receive us_prev from previous iteration of access
+            MPI_Recv(us_prev, num_vectors, MPI_DOUBLE, 0, TAG_US_PREV, MPI_COMM_WORLD, &status);
+            double alpha = line_search(objective, us_prev, us, num_vectors, app);
+            printf("alpha: %f\n", alpha);
+            // ... put result in us
+            for (int i = 0; i < num_vectors; i++) {
+                us[i] = us_prev[i] * alpha + us[i] * (1 - alpha);
+            }
+       }
+        // "Broadcast" the result of the line search to worker processes
+        // TODO: Use MPI_Gather instead of this
+        /* for (int i = 1; i < num_vectors; i++) { */
+        /*     MPI_Send(&(us[i]), 1, MPI_DOUBLE, i, TAG_LINE_SEARCH_RESULT, MPI_COMM_WORLD); */
+        /* } */
+        // Send the us_prev for the next iteration
+        MPI_Isend(us, num_vectors, MPI_DOUBLE, 0, TAG_US_PREV, MPI_COMM_WORLD, &request);
+   } else {
+        // Worker process
+        // Send u's data to master process
+        // use MPI_Gather
+        /* MPI_Send(&u->value, 1, MPI_DOUBLE, 0, TAG_DATA_TO_MASTER, MPI_COMM_WORLD); */
+        // Receive the result of the line search
+        // Update variables in the vector
+        // use MPI_Gather
+        /* MPI_Recv(&u->value, 1, MPI_DOUBLE, 0, TAG_LINE_SEARCH_RESULT, MPI_COMM_WORLD, &status); */
+   }
 
    return 0;
 }
@@ -228,27 +321,7 @@ my_SpaceTimeNorm(braid_App      app,
       accumulator += (norm * norm);
   } 
   return sqrt(norm);
-
 }
-
-double line_search(double (*f)(double)){
-    double a = 0.0;
-    double b = 1.0;
-    double gr = (1.0+sqrt(5.0))/2.0;
-    double c = 1 - 1/gr;
-    double d = 1/gr;
-    while (fabs(c-d) > 0.00001) {
-        if (f(c) < f(d)){
-            b = d;
-        } else {
-            a = c;
-        }
-        c = b - (b - a)/gr;
-        d = a + (b - a)/gr;
-    }
-    return (a+b)/2;
-}
-
 
 /*--------------------------------------------------------------------------
  * Main driver
@@ -273,6 +346,7 @@ int main (int argc, char *argv[])
    /* set up app structure */
    app = (my_App *) malloc(sizeof(my_App));
    (app->rank)   = rank;
+   app->first_access = 1;
    
    /* initialize XBraid and set options */
    braid_Init(MPI_COMM_WORLD, MPI_COMM_WORLD, tstart, tstop, ntime, app,
