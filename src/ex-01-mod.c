@@ -189,34 +189,53 @@ int my_Sync(braid_App app, braid_SyncStatus status) {
     int level;
     // The lower and upper indices in time that our proccess has computed
     int lower_t, upper_t;
-    int num_proccesors;
+    int num_procesors;
+    int num_total_points, c_factor;
 
-    MPI_Comm_size(MPI_COMM_WORLD, &num_proccesors);
-    braid_SyncStatusGetNTPoints(status, &num_vectors);
+    MPI_Comm_size(MPI_COMM_WORLD, &num_procesors);
 
     braid_SyncStatusGetLevel(status, &level);
+
+    braid_SyncStatusGetNTPoints(status, &num_total_points);
+    _braid_GetCFactor((braid_Core) status, level, &c_factor);
     
     if (level != 0) {
         return 0;
     }
 
-    int safe_message_size = (num_vectors / num_proccesors + 2) * sizeof(double) + 2 * sizeof(int);
+    num_vectors = num_total_points / c_factor;
+    
+    // Collect us - the vectors for our process
+    _braid_Grid **grids = _braid_StatusElt(status, grids);
+    _braid_Grid *grid = grids[level];
+    upper_t = grid->cupper / c_factor;
+    lower_t = grid->clower / c_factor;
 
-    braid_SyncStatusGetTIUL(status, &upper_t, &lower_t, level);
+    int safe_message_size =
+        (num_vectors / num_procesors + 2) * sizeof(double) + 2 * sizeof(int);
 
-    int my_num_values = upper_t - lower_t + 1;
+    int my_num_values = upper_t - lower_t; // Assuming upper_t is not inclusive
+
+    printf("There should be %d total C points, but I'm only responsible for %d\n", num_vectors, my_num_values);
 
     assert(2 * sizeof(int) + my_num_values * sizeof(double) <= (unsigned long) safe_message_size);
     
-    // Collect us - the vectors for our process
     braid_Vector *us = malloc(sizeof(braid_Vector) * my_num_values);
-    _braid_Grid **grids = _braid_StatusElt(status, grids);
-    _braid_Grid *grid = grids[level];
-    braid_BaseVector *almost = grid->ua;
+
+    /* braid_BaseVector *almost = grid->ua; */
     for (int i = 0; i < my_num_values; i++) {
-        assert(almost != NULL);
-        assert(almost[i] != NULL);
-        us[i] = almost[i]->userVector;
+        /* assert(almost != NULL); */
+        /* assert(almost[i] != NULL); */
+        int fine_index;
+        _braid_MapCoarseToFine(lower_t + i, c_factor, fine_index);
+
+        braid_BaseVector base_v;
+
+        _braid_UGetVectorRef((braid_Core) status, level, fine_index, &base_v);
+
+        assert(base_v != NULL);
+
+        us[i] = base_v->userVector;
     }
 
     // Now that we have us...
@@ -226,10 +245,10 @@ int my_Sync(braid_App app, braid_SyncStatus status) {
         // Receive all other vectors
         double *us_combined = malloc(sizeof(double) * num_vectors);
         // handle our own us
-        for (int i = lower_t; i < upper_t + 1; i++) {
+        for (int i = lower_t; i < upper_t; i++) {
             us_combined[i] = us[i]->value;
         }
-        for (int i = 0; i < num_proccesors - 1; i++) {
+        for (int i = 0; i < num_procesors - 1; i++) {
             // Received message:
             // (int: the start index (lower_t)) : (int: the number of us (upper_t - lower_t)) : doubles (us)
             char *message = malloc(safe_message_size);
