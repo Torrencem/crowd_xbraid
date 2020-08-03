@@ -445,9 +445,6 @@ int MyBraidApp::TriSolve(braid_Vector uleft_, braid_Vector uright_,
                        Qi * delta_rho_ip1 - dt * Qi * nabla_lambda_i -
                        delta_lambda_im1 / dt - nabla_rho_i;
             u->dlambda = invertDiagonal(A) * b;
-            u->drho = invertDiagonal(Qi) *
-                      (-nabla_rho_i - delta_lambda_im1 / dt + u->dlambda / dt);
-
             if (index != final_index) { // Otherwise delta_m doesn't matter
                 Vector nabla_m_i = this->compute_GwMi(index);
                 // Setup Ax = b system
@@ -455,7 +452,12 @@ int MyBraidApp::TriSolve(braid_Vector uleft_, braid_Vector uright_,
 
                 // Solve Pi x = b
                 u->dm = invertDiagonal(Pi) * b;
+                
+                u->drho = dt * (nabla_lambda_i + K * u->dm + (1/dt) * delta_rho_ip1);
+            } else {
+                u->drho = dt * nabla_lambda_i;
             }
+            
         } else {
             Vector nabla_lambda_0 = this->compute_GwLi(0);
             Vector dlambda_1 = uright->dlambda;
@@ -466,7 +468,6 @@ int MyBraidApp::TriSolve(braid_Vector uleft_, braid_Vector uright_,
         // Compute delta_m
         // Equation 9
     }
-
     /* no refinement */
     status.SetRFactor(1);
 
@@ -556,6 +557,7 @@ int MyBraidApp::Access(braid_Vector u_, BraidAccessStatus &astatus) {
     astatus.GetDone(&done);
     if (done) {
         astatus.GetTIndex(&index);
+        std::cout << "From index " << index << std::endl;
 
         MPI_Request send_request;
         int message_size = sizeof(int) * 2 + sizeof(double) * (mspace + 2);
@@ -704,7 +706,7 @@ int main(int argc, char *argv[]) {
     min_coarse = 1;
     nrelax = 1;
     nrelaxc = 1;
-    maxiter = 1;
+    maxiter = 5;
     cfactor = 2;
     tol = 1.0e-6;
     access_level = 1;
