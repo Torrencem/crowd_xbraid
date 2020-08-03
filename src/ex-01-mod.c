@@ -142,30 +142,37 @@ int my_SpatialNorm(braid_App app, braid_Vector u, double *norm_ptr) {
 
 // --- LINE SEARCH STUFF ---
 
-double my_Residual(braid_App app, double u, int index) { return 0.0; }
-
-double objective(double alpha, double *us_prev, double *us, int len,
-                 braid_App app) {
+double objective(double alpha, double *us_prev, double *us, int len, int level,
+                 braid_App app, braid_Core core) {
     double result = 0.0;
     for (int i = 0; i < len; i++) {
-        double residual =
-            my_Residual(app, alpha * us_prev[i] + (1 - alpha) * us[i], i);
-        result += residual * residual;
+        my_Vector r_;
+        my_Vector ustop_;
+        struct _braid_BaseVector_struct ustop;
+        struct _braid_BaseVector_struct r;
+        ustop_.value = alpha * us_prev[i] + (1 - alpha) * us[i];
+        ustop.userVector = (braid_Vector) &ustop_;
+        ustop.bar = NULL;
+        r.userVector = (braid_Vector) &r_;
+        r.bar = NULL;
+        _braid_Residual(core, level, i, &ustop, &r);
+        result += r.userVector->value * r.userVector->value;
     }
     return result;
 }
 
-typedef double (*Objective)(double, double *, double *, int, braid_App);
+typedef double (*Objective)(double, double *, double *, int, int, braid_App, braid_Core);
 
-double line_search(Objective f, double *us_prev, double *us, int len,
-                   braid_App app) {
+double line_search(Objective f, double *us_prev, double *us, int len, int level,
+                   braid_App app, braid_Core status) {
+    /* return 1.0; */
     double a = 0.0;
     double b = 1.0;
     double gr = (1.0 + sqrt(5.0)) / 2.0;
     double c = 1 - 1 / gr;
     double d = 1 / gr;
     while (fabs(c - d) > 0.00001) {
-        if (f(c, us_prev, us, len, app) < f(d, us_prev, us, len, app)) {
+        if (f(c, us_prev, us, len, level, app, status) < f(d, us_prev, us, len, level, app, status)) {
             b = d;
         } else {
             a = c;
@@ -271,11 +278,16 @@ int my_Sync(braid_App app, braid_SyncStatus status) {
             MPI_Recv(us_prev, num_vectors, MPI_DOUBLE, 0, TAG_US_PREV,
                      MPI_COMM_WORLD, &mpi_status);
             double alpha =
-                line_search(objective, us_prev, us_combined, num_vectors, app);
+                line_search(objective, us_prev, us_combined, num_vectors, level, app, (braid_Core) status);
             printf("alpha: %f\n", alpha);
             // ... put result in us_combined
             for (int i = 0; i < num_vectors; i++) {
-                us_combined[i] = us_prev[i] * alpha + us_combined[i] * (1 - alpha);
+                us_combined[i] = us_prev[i] * (1 - alpha) + us_combined[i] * alpha;
+            }
+
+            // As the main process, we need to update our us[i]'s
+            for (int i = lower_t; i < upper_t; i++) {
+                us[i]->value = us_combined[i];
             }
         }
         // Send us_prev for next iteration of loop
