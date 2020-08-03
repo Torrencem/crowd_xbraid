@@ -55,8 +55,8 @@ for line in Lines:
         x = int(x)
         y = int(line.split(' ')[1][0:-1])
         z = float(line.split(' ')[2])
-        xdata[x][y]= x
-        ydata[x][y]= y
+        xdata[x][y]= 1.0 * x /xdim
+        ydata[x][y]= 1.0 * y/ydim
         zdata[x][y] = z
 
 
