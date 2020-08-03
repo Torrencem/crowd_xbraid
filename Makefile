@@ -91,57 +91,23 @@ BRAID_LIB_FILE = $(BRAID_DIR)/libbraid.a
 
 EIGEN_DIR = ./eigen/
 
-.PHONY: all xbraid model_problem crowd clean
+.PHONY: all xbraid clean
 
 .SUFFIXES:
-.SUFFIXES: .c .o
+.SUFFIXES: .c .o .cpp
 
-all: xbraid crowd model_problem model_problem_upwind burger
+all: xbraid crowd_horesh crowd_horesh_xbraid
 
 xbraid: ./xbraid/braid/*.c
 	cd xbraid; $(MAKE) braid
 
-crowd: src/crowd.c $(BRAID_LIB_FILE)
-	@echo "Building" $@ "..."
-	$(MPICC) $(CFLAGS) -L. -llapacke -llapack -lopenblas -lgfortran $(BRAID_FLAGS) -o crowd src/crowd.c $(BRAID_LIB_FILE) $(LFLAGS) $(EXTRAFLAGS)
-
-utils: src/utils.c $(BRAID_LIB_FILE)
-	@echo "Building" $@ "..."
-	$(MPICC) $(CFLAGS) -L. -llapacke -llapack -lopenblas -lgfortran $(BRAID_FLAGS) -o utils src/utils.c $(BRAID_LIB_FILE) $(LFLAGS) $(EXTRAFLAGS)
-
-test: src/utils.c $(BRAID_LIB_FILE)
-	@echo "Running tests in utils.c..."
-	$(MPICC) -D TESTS -D NOINLINE $(CFLAGS) -Wextra -L. -llapacke -llapack -lopenblas -lgfortran $(BRAID_FLAGS) -o tests src/utils.c $(BRAID_LIB_FILE) $(LFLAGS) $(EXTRAFLAGS) -g -O0
-	./tests
-
-testxx: src/utils.cpp $(BRAID_LIB_FILE)
-	@echo "Running tests in utils.cpp..."
-	$(MPICXX) -D TESTS -D NOINLINE $(CXXFLAGS) -Wextra -L. -llapacke -llapack -lopenblas -lgfortran $(BRAID_FLAGS) -o tests src/utils.cpp $(BRAID_LIB_FILE) $(LFLAGS) $(EXTRAFLAGS) -g -O0
-	./tests
-
-burger: src/burger.cpp $(BRAID_LIB_FILE)
-	@echo "Building" $@ "..."
-	$(MPICXX) $(CXXFLAGS) -Wextra -L. -llapacke -llapack -lopenblas -lgfortran $(BRAID_FLAGS) -o burger src/burger.cpp $(BRAID_LIB_FILE) $(LFLAGS) $(EXTRAFLAGS)
-
-model_problem: src/model_problem.c $(BRAID_LIB_FILE)
-	@echo "Building" $@ "..."
-	$(MPICC) $(CFLAGS) -L. -llapacke -llapack -lopenblas -lgfortran $(BRAID_FLAGS) -o model_problem src/model_problem.c $(BRAID_LIB_FILE) $(LFLAGS) $(EXTRAFLAGS)
-
-model_problem_backwards: src/model_problem.c $(BRAID_LIB_FILE)
-	@echo "Building" $@ "..."
-	$(MPICC) $(CFLAGS) -D MODEL_BACKWARDS -L. -llapacke -llapack -lopenblas -lgfortran $(BRAID_FLAGS) -o model_problem_backwards src/model_problem.c $(BRAID_LIB_FILE) $(LFLAGS) $(EXTRAFLAGS)
-
 ex-01-mod: src/ex-01-mod.c $(BRAID_LIB_FILE)
 	@echo "Building" $@ "..."
-	$(MPICC) $(CFLAGS) -L. -llapacke -llapack -lopenblas -lgfortran $(BRAID_FLAGS) -o ex-01-mod src/ex-01-mod.c $(BRAID_LIB_FILE) $(LFLAGS) $(EXTRAFLAGS)
-
-model_problem_pp: src/model_problem.cpp $(BRAID_LIB_FILE)
-	@echo "Building" $@ "..."
-	$(MPICXX) $(CXXFLAGS) -L. -llapacke -llapack -lopenblas -lgfortran $(BRAID_FLAGS) -o model_problem_pp src/model_problem.cpp $(BRAID_LIB_FILE) $(LFLAGS) $(EXTRAFLAGS)
+	$(MPICC) $(CFLAGS) $(BRAID_FLAGS) -o ex-01-mod src/ex-01-mod.c $(BRAID_LIB_FILE) $(LFLAGS) $(EXTRAFLAGS)
 
 crowd_horesh_xbraid: src/crowd_horesh_xbraid.cpp
 	@echo "Building" $@ "..."
-	$(MPICXX) $(CXXFLAGS) -L. -llapacke -llapack -lopenblas -lgfortran $(BRAID_FLAGS) -o crowd_horesh_xbraid src/crowd_horesh_xbraid.cpp -I $(EIGEN_DIR) $(BRAID_LIB_FILE) $(LFLAGS) $(EXTRAFLAGS)
+	$(MPICXX) $(CXXFLAGS) $(BRAID_FLAGS) -o crowd_horesh_xbraid src/crowd_horesh_xbraid.cpp -I $(EIGEN_DIR) $(BRAID_LIB_FILE) $(LFLAGS) $(EXTRAFLAGS)
 
 crowd_horesh: src/crowd_horesh.cpp
 	@echo "Building" $@ "..."
@@ -149,9 +115,9 @@ crowd_horesh: src/crowd_horesh.cpp
 
 clean:
 	rm -f *.out.*
-	rm -f *.o crowd utils model_problem tests model_problem_backwards model_problem_upwind burger
+	rm -f *.o crowd_horesh crowd_horesh_xbraid ex-01-mod
 
-fmt: src/*.c
+fmt: src/*.c src/*.cpp
 	for file in $^ ; do \
 		echo "Formatting" $${file} "..." ; \
 		clang-format $${file} > $${file}.fmt ; \

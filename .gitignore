@@ -1,16 +1,9 @@
 **/*.out.*
-crowd
-utils
-model_problem
-model_problem_pp
-model_problem_backwards
 crowd_horesh_xbraid
 ex-01-mod
-libgfortran.a
-tests
-burger
 crowd_horesh
 **/*.dSYM/*
 compile_flags.txt
 **/*.session.vim
+.session.vim
 out.txt

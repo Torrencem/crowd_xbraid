@@ -1,10 +1,10 @@
-#include <iostream>
 #include <Eigen/Sparse>
 #include <Eigen/SparseLU>
+#include <iostream>
 #include <math.h>
 
-using Eigen::SparseMatrix;
 using Eigen::MatrixXd;
+using Eigen::SparseMatrix;
 using Eigen::VectorXd;
 
 // typedef SparseMatrix<double> Sparse;
@@ -18,24 +18,21 @@ double nice_curve(double x, double c) {
 }
 
 /// Initial condition for rho
-double initial_condition(double x) {
-    return nice_curve(x, 0.77);
-}
+double initial_condition(double x) { return nice_curve(x, 0.77); }
 
 /// Final condition for rho
-double final_condition(double x) {
-    return nice_curve(x, 0.7);
-}
+double final_condition(double x) { return nice_curve(x, 0.7); }
 
 Sparse block_diag(const Sparse &diag, const int ncopies) {
-    auto m2 = SparseMatrix<double> (diag.rows() * ncopies, diag.cols() * ncopies);
+    auto m2 =
+        SparseMatrix<double>(diag.rows() * ncopies, diag.cols() * ncopies);
 
     for (int l = 0; l < ncopies; l++) {
         // For each non-zero entry in diag
         for (int k = 0; k < diag.outerSize(); k++)
             for (SparseMatrix<double>::InnerIterator it(diag, k); it; ++it) {
-                m2.insert(l * diag.rows() + it.row(), l * diag.cols() + it.col())
-                    = it.value();
+                m2.insert(l * diag.rows() + it.row(),
+                          l * diag.cols() + it.col()) = it.value();
             }
     }
 
@@ -43,46 +40,40 @@ Sparse block_diag(const Sparse &diag, const int ncopies) {
 }
 
 /// Compute the equivelent of [a; b] from matlab
-Sparse jointb(const Sparse &a,
-                            const Sparse &b) {
+Sparse jointb(const Sparse &a, const Sparse &b) {
     assert(a.cols() == b.cols());
-    auto m2 = Sparse (a.rows() + b.rows(), a.cols());
-    
+    auto m2 = Sparse(a.rows() + b.rows(), a.cols());
+
     // For each non-zero entry in a
     for (int k = 0; k < a.outerSize(); k++)
         for (Sparse::InnerIterator it(a, k); it; ++it) {
-            m2.insert(it.row(), it.col())
-                = it.value();
+            m2.insert(it.row(), it.col()) = it.value();
         }
-    
+
     // For each non-zero entry in b
     for (int k = 0; k < b.outerSize(); k++)
         for (Sparse::InnerIterator it(b, k); it; ++it) {
-            m2.insert(it.row() + a.rows(), it.col())
-                = it.value();
+            m2.insert(it.row() + a.rows(), it.col()) = it.value();
         }
 
     return m2;
 }
 
 /// Compute the equivelent of [a, b] from matlab
-Sparse joinlr(const Sparse &a,
-                            const Sparse &b) {
+Sparse joinlr(const Sparse &a, const Sparse &b) {
     assert(a.rows() == b.rows());
-    auto m2 = Sparse (a.rows(), a.cols() + b.cols());
-    
+    auto m2 = Sparse(a.rows(), a.cols() + b.cols());
+
     // For each non-zero entry in a
     for (int k = 0; k < a.outerSize(); k++)
         for (Sparse::InnerIterator it(a, k); it; ++it) {
-            m2.insert(it.row(), it.col())
-                = it.value();
+            m2.insert(it.row(), it.col()) = it.value();
         }
-    
+
     // For each non-zero entry in b
     for (int k = 0; k < b.outerSize(); k++)
         for (Sparse::InnerIterator it(b, k); it; ++it) {
-            m2.insert(it.row(), it.col() + a.cols())
-                = it.value();
+            m2.insert(it.row(), it.col() + a.cols()) = it.value();
         }
 
     return m2;
@@ -97,9 +88,9 @@ void test_block_diag() {
     m.insert(2, 0) = 4;
     std::cout << "M is:" << std::endl;
     std::cout << m << std::endl;
-    
+
     auto m2 = block_diag(m, 3);
-    
+
     std::cout << std::endl << "block_diag(M, 3) is:" << std::endl;
     std::cout << m2 << std::endl;
 }
@@ -128,10 +119,10 @@ Sparse get_At(int mspace, int ntime) {
 }
 
 Sparse get_derivative_matrix_space(int mspace, int ntime, double h) {
-    Sparse top_bottom (mspace, (mspace + 1) * ntime);
+    Sparse top_bottom(mspace, (mspace + 1) * ntime);
     // TODO
-    Sparse top_bottom2 (mspace, (mspace + 1) * ntime);
-    Sparse interior_block (mspace, mspace + 1);
+    Sparse top_bottom2(mspace, (mspace + 1) * ntime);
+    Sparse interior_block(mspace, mspace + 1);
     for (int i = 0; i < mspace; i++) {
         interior_block.insert(i, i) = -1.0;
         interior_block.insert(i, i + 1) = 1.0;
@@ -143,14 +134,14 @@ Sparse get_derivative_matrix_space(int mspace, int ntime, double h) {
 }
 
 Sparse get_derivative_matrix_time(int mspace, int ntime, double h) {
-    Sparse top (mspace, mspace * (ntime + 1));
-    Sparse bottom (mspace, mspace * (ntime + 1));
+    Sparse top(mspace, mspace * (ntime + 1));
+    Sparse bottom(mspace, mspace * (ntime + 1));
     for (int i = 0; i < mspace; i++) {
         top.insert(i, i) = 1.0;
         bottom.insert(i, mspace * ntime + i) = -1.0;
     }
 
-    Sparse center (mspace * ntime, mspace * (ntime + 1));
+    Sparse center(mspace * ntime, mspace * (ntime + 1));
     for (int i = 0; i < ntime; i++) {
         for (int j = 0; j < mspace; j++) {
             center.insert(i * mspace + j, i * mspace + j) = -1.0;
@@ -164,14 +155,8 @@ Sparse get_derivative_matrix_time(int mspace, int ntime, double h) {
     return D;
 }
 
-void calc_fixed_matrices(int mspace,
-        int ntime,
-        double h,
-        Sparse &D,
-        Sparse &D1,
-        Sparse &D2,
-        Sparse &As,
-        Sparse &At) {
+void calc_fixed_matrices(int mspace, int ntime, double h, Sparse &D, Sparse &D1,
+                         Sparse &D2, Sparse &As, Sparse &At) {
     D1 = get_derivative_matrix_space(mspace, ntime, h);
     D2 = get_derivative_matrix_time(mspace, ntime, h);
     D = joinlr(D1, D2);
@@ -184,7 +169,7 @@ Sparse get_A_hat(Vector &rho, Vector &m, Sparse &As, Sparse &At) {
     Vector vec_2 = 2 * At.transpose() * As * (m.cwiseProduct(m));
     Vector vec_3 = (rho.cwiseProduct(rho.cwiseProduct(rho))).cwiseInverse();
     int dim = vec_1.rows() + vec_2.rows();
-    Sparse A (dim, dim);
+    Sparse A(dim, dim);
     for (int i = 0; i < vec_1.rows(); i++) {
         A.insert(i, i) = vec_1[i];
     }
@@ -194,16 +179,12 @@ Sparse get_A_hat(Vector &rho, Vector &m, Sparse &As, Sparse &At) {
     return A;
 }
 
-Vector get_GwL(Vector &m,
-        Vector &rho,
-        Vector &lambda,
-        Sparse &As,
-        Sparse &At,
-        Sparse &D1,
-        Sparse &D2) {
-    Vector GmL1 = 2.0 * m.asDiagonal() * As.transpose() * At * rho.cwiseInverse();
+Vector get_GwL(Vector &m, Vector &rho, Vector &lambda, Sparse &As, Sparse &At,
+               Sparse &D1, Sparse &D2) {
+    Vector GmL1 =
+        2.0 * m.asDiagonal() * As.transpose() * At * rho.cwiseInverse();
     Vector GmL2 = D1.transpose() * lambda;
-    
+
     Vector GmL = GmL1 + GmL2;
     Vector GrhoL =
         rho.cwiseProduct(rho).eval().cwiseInverse().eval().asDiagonal() *
@@ -221,7 +202,7 @@ Vector get_GwL(Vector &m,
 }
 
 Vector get_GlambdaL(Vector &m, Vector &rho, Vector &q, Sparse &D) {
-    Vector x (m.size() + rho.size());
+    Vector x(m.size() + rho.size());
     for (int i = 0; i < m.size() + rho.size(); i++) {
         if (i >= m.size()) {
             x[i] = rho[i - m.size()];
@@ -247,7 +228,7 @@ void test_join() {
     m.insert(1, 2) = 2;
     m.insert(1, 3) = 3;
     m.insert(2, 4) = 4;
-    
+
     Sparse m2(3, 5);
 
     m2.insert(0, 0) = 1;
@@ -263,15 +244,14 @@ void test_join() {
 
     std::cout << "[M; M2] is:" << std::endl;
     std::cout << jointb(m, m2) << std::endl;
-    
+
     std::cout << "[M, M2] is:" << std::endl;
     std::cout << joinlr(m, m2) << std::endl;
 }
 
 double GR = 1.61803398875;
 
-template <typename F>
-double minarg(F f, double a, double b, double tol) {
+template <typename F> double minarg(F f, double a, double b, double tol) {
     double c = b - (b - a) / GR;
     double d = a + (b - a) / GR;
     while (abs(c - d) > tol) {
@@ -288,7 +268,9 @@ double minarg(F f, double a, double b, double tol) {
     return (a + b) / 2;
 }
 
-double reward(double x, Vector &dm, Vector &drho, Vector &dlambda, Vector &m, Vector &rho, Vector &lambda, Sparse &As, Sparse &At, Sparse &D1, Sparse &D2, Vector &q, Sparse &D) {
+double reward(double x, Vector &dm, Vector &drho, Vector &dlambda, Vector &m,
+              Vector &rho, Vector &lambda, Sparse &As, Sparse &At, Sparse &D1,
+              Sparse &D2, Vector &q, Sparse &D) {
     Vector m2 = m + x * dm;
     Vector rho2 = rho + x * drho;
     Vector lambda2 = lambda + x * dlambda;
@@ -297,9 +279,12 @@ double reward(double x, Vector &dm, Vector &drho, Vector &dlambda, Vector &m, Ve
     return GwL.squaredNorm() + GlambdaL.squaredNorm();
 }
 
-double line_search(Vector &dm, Vector &drho, Vector &dlambda, Vector &m, Vector &rho, Vector &lambda, Sparse &As, Sparse &At, Sparse &D1, Sparse &D2, Vector &q, Sparse &D) {
+double line_search(Vector &dm, Vector &drho, Vector &dlambda, Vector &m,
+                   Vector &rho, Vector &lambda, Sparse &As, Sparse &At,
+                   Sparse &D1, Sparse &D2, Vector &q, Sparse &D) {
     auto f = [&](double x) {
-        return reward(x, dm, drho, dlambda, m, rho, lambda, As, At, D1, D2, q, D);
+        return reward(x, dm, drho, dlambda, m, rho, lambda, As, At, D1, D2, q,
+                      D);
     };
     double tmp = minarg(f, -0.1, 0.1, 1e-8);
     return tmp;
@@ -342,10 +327,12 @@ int main() {
     // for (int i = mspace / 2; i < mspace; i++) {
     //     q.insert(i, 0) = 1.0;
     // }
-    // for (int i = mspace * (ntime + 1); i < mspace / 2 * (ntime * 2 + 3); i++) {
+    // for (int i = mspace * (ntime + 1); i < mspace / 2 * (ntime * 2 + 3); i++)
+    // {
     //     q.insert(i, 0) = 1.0;
     // }
-    // for (int i = mspace / 2 * (ntime * 2 + 3); i < mspace * (ntime + 2); i++) {
+    // for (int i = mspace / 2 * (ntime * 2 + 3); i < mspace * (ntime + 2); i++)
+    // {
     //     q.insert(i, 0) = 0.1;
     // }
 
@@ -366,13 +353,14 @@ int main() {
 
     calc_fixed_matrices(mspace, ntime, d_time, D, D1, D2, As, At);
 
-    Sparse filler_zeros (D.rows(), D.rows());
+    Sparse filler_zeros(D.rows(), D.rows());
 
     for (int i = 0; i < iters; i++) {
         Sparse A_hat = get_A_hat(rho, m, As, At);
 
-        Sparse A = jointb(joinlr(A_hat, D.transpose()), joinlr(D, filler_zeros));
-        
+        Sparse A =
+            jointb(joinlr(A_hat, D.transpose()), joinlr(D, filler_zeros));
+
         Vector GwL = get_GwL(m, rho, lambda, As, At, D1, D2);
         Vector GlambdaL = get_GlambdaL(m, rho, q, D);
         Vector b(GwL.size() + GlambdaL.size());
@@ -385,10 +373,12 @@ int main() {
         }
 
         // Check convergence
-        std::cout << "norm(GwL): " << GwL.norm() / (mspace * ntime) << std::endl;
-        std::cout << "norm(GlambdaL): " << GlambdaL.norm() / (mspace * ntime) << std::endl;
+        std::cout << "norm(GwL): " << GwL.norm() / (mspace * ntime)
+                  << std::endl;
+        std::cout << "norm(GlambdaL): " << GlambdaL.norm() / (mspace * ntime)
+                  << std::endl;
         std::cout << "Norm: " << b.norm() / (mspace * ntime) << std::endl;
-        
+
         // Solve A(solution) = b
         Eigen::BiCGSTAB<Sparse, Eigen::IncompleteLUT<double>> solver;
         solver.compute(A);
@@ -401,7 +391,7 @@ int main() {
             printf("Error solving Ax = b!\n");
             exit(1);
         }
-        
+
         Eigen::Map<Vector> dm(solution.data(), (mspace + 1) * ntime);
         int start = (mspace + 1) * ntime;
         int len = mspace * (ntime + 1);
@@ -414,8 +404,9 @@ int main() {
         Vector drho_(drho);
         Vector dlambda_(dlambda);
 
-        double alpha = line_search(dm_, drho_, dlambda_, m, rho, lambda, As, At, D1, D2, q, D);
-        
+        double alpha = line_search(dm_, drho_, dlambda_, m, rho, lambda, As, At,
+                                   D1, D2, q, D);
+
         std::cout << "drho norm: " << drho.norm() << std::endl;
         std::cout << "alpha: " << alpha << std::endl;
 
@@ -426,13 +417,8 @@ int main() {
 
     for (int x = 0; x < ntime; x++) {
         for (int y = 0; y < mspace; y++) {
-            std::cout 
-                << x
-                << ", " 
-                << y
-                << ": " 
-                << rho[x * mspace + y]
-                << std::endl;
+            std::cout << x << ", " << y << ": " << rho[x * mspace + y]
+                      << std::endl;
         }
     }
 }
