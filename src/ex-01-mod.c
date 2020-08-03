@@ -155,7 +155,8 @@ double objective(double alpha, double *us_prev, double *us, int len, int level,
         ustop.bar = NULL;
         r.userVector = (braid_Vector) &r_;
         r.bar = NULL;
-        _braid_Residual(core, level, i, &ustop, &r);
+        // TODO: i * coarsening factor??
+        _braid_Residual(core, level, i * 2, &ustop, &r);
         result += r.userVector->value * r.userVector->value;
     }
     return result;
@@ -165,12 +166,12 @@ typedef double (*Objective)(double, double *, double *, int, int, braid_App, bra
 
 double line_search(Objective f, double *us_prev, double *us, int len, int level,
                    braid_App app, braid_Core status) {
-    /* return 1.0; */
+    /* return 0.0; */
     double a = 0.0;
     double b = 1.0;
     double gr = (1.0 + sqrt(5.0)) / 2.0;
-    double c = 1 - 1 / gr;
-    double d = 1 / gr;
+    double c = b - (b - a) / gr;
+    double d = a + (b - a) / gr;
     while (fabs(c - d) > 0.00001) {
         if (f(c, us_prev, us, len, level, app, status) < f(d, us_prev, us, len, level, app, status)) {
             b = d;
