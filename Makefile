@@ -113,6 +113,15 @@ crowd_horesh: src/crowd_horesh.cpp
 	@echo "Building" $@ "..."
 	clang++ $(CXXFLAGS) -o crowd_horesh src/crowd_horesh.cpp -I $(EIGEN_DIR) $(EXTRAFLAGS) -Wextra -std=c++14
 
+run_horesh: crowd_horesh
+	./crowd_horesh
+
+run_horesh_xbraid: crowd_horesh_xbraid
+	./crowd_horesh_xbraid
+
+run_ex_01_mod: ex-01-mod
+	./ex-01-mod
+
 clean:
 	rm -f *.out.*
 	rm -f *.o crowd_horesh crowd_horesh_xbraid ex-01-mod
