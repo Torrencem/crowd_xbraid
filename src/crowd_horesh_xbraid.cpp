@@ -64,15 +64,26 @@
 
 // #include "lapacke.h"
 
-Sparse nonzeroCwiseInverse(const Sparse &a) {
-    auto m2 = Sparse (a.rows(), a.cols());
+// Sparse nonzeroCwiseInverse(const Sparse &a) {
+//     auto m2 = Sparse (a.rows(), a.cols());
+//
+//     // For each non-zero entry in a
+//     for (int k = 0; k < a.outerSize(); k++)
+//         for (Sparse::InnerIterator it(a, k); it; ++it) {
+//             if (it.value() != 0) m2.insert(it.row(), it.col())
+//                 = 1/it.value();
+//     }
+//     return m2;
+// }
 
-    // For each non-zero entry in a
-    for (int k = 0; k < a.outerSize(); k++)
-        for (Sparse::InnerIterator it(a, k); it; ++it) {
-            if (it.value() != 0) m2.insert(it.row(), it.col())
-                = 1/it.value();
+Sparse invertDiagonal(const Sparse &a) {
+    // assert(a.rows() == a.cols());
+    Sparse m2 (a.rows(), a.cols());
+
+    for (int i = 0; i < a.rows(); i++) {
+        m2.insert(i, i) = 1.0 / a.coeff(i, i);
     }
+
     return m2;
 }
 
@@ -465,11 +476,11 @@ int MyBraidApp::TriSolve(braid_Vector uleft_, braid_Vector uright_,
             }
             Sparse I (DLAMBDA_LEN_SPACE, DLAMBDA_LEN_SPACE);
             I.setIdentity();
-            Sparse A = -dt * Qi * K * nonzeroCwiseInverse(Pi) * K.transpose();
+            Sparse A = -dt * Qi * K * invertDiagonal(Pi) * K.transpose();
             A -= I / dt;
-            Vector b = dt * Qi * K * nonzeroCwiseInverse(Pi) * nabla_m_i - Qi * delta_rho_ip1 - dt * Qi * nabla_lambda_i - delta_lambda_im1 / dt - nabla_rho_i;
-            u->dlambda = nonzeroCwiseInverse(A) * b;
-            u->drho = nonzeroCwiseInverse(Qi) * (-nabla_rho_i - delta_lambda_im1 / dt + u->dlambda / dt);
+            Vector b = dt * Qi * K * invertDiagonal(Pi) * nabla_m_i - Qi * delta_rho_ip1 - dt * Qi * nabla_lambda_i - delta_lambda_im1 / dt - nabla_rho_i;
+            u->dlambda = invertDiagonal(A) * b;
+            u->drho = invertDiagonal(Qi) * (-nabla_rho_i - delta_lambda_im1 / dt + u->dlambda / dt);
     
             if (index != final_index) { // Otherwise delta_m doesn't matter
                 Vector nabla_m_i = this->compute_GwMi(index);
@@ -477,7 +488,7 @@ int MyBraidApp::TriSolve(braid_Vector uleft_, braid_Vector uright_,
                 Vector b = -nabla_m_i - K.transpose() * u->dlambda;
             
                 // Solve Pi x = b
-                u->dm = nonzeroCwiseInverse(Pi) * b;
+                u->dm = invertDiagonal(Pi) * b;
             }
         } else {
             Vector nabla_lambda_0 = this->compute_GwLi(0);
