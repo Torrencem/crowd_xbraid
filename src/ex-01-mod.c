@@ -185,8 +185,8 @@ int my_Access(braid_App app, braid_Vector u, braid_AccessStatus astatus) {
     MPI_Request request;
 
     braid_AccessStatusGetTIndex(astatus, &index);
-
     braid_AccessStatusGetLevel(astatus, &level);
+    braid_AccessStatusGetNTPoints(astatus, &num_vectors);
 
     if (level != 0) {
         return 0;
@@ -194,15 +194,9 @@ int my_Access(braid_App app, braid_Vector u, braid_AccessStatus astatus) {
 
     if (app->rank == 0) {
         // Master process
-        braid_AccessStatusGetNTPoints(astatus, &num_vectors);
         // Receive all other vectors
         double *us = (double *)malloc(sizeof(double) * (num_vectors));
-        us[0] = u->value;
-        // Use MPI_Gather instead of this
-        /* for (int i = 1; i < num_vectors; i++) { */
-        /* MPI_Recv(&(us[i]), 1, MPI_DOUBLE, MPI_ANY_SOURCE, TAG_DATA_TO_MASTER
-         * + i, MPI_COMM_WORLD, &status); */
-        /* } */
+        MPI_Gather(&u->value, 1, MPI_DOUBLE, us, num_vectors, MPI_DOUBLE, 0, MPI_COMM_WORLD);
 
         if (app->first_access) {
             app->first_access = 0;
@@ -221,25 +215,19 @@ int my_Access(braid_App app, braid_Vector u, braid_AccessStatus astatus) {
             }
         }
         // "Broadcast" the result of the line search to worker processes
-        // TODO: Use MPI_Gather instead of this
-        /* for (int i = 1; i < num_vectors; i++) { */
-        /*     MPI_Send(&(us[i]), 1, MPI_DOUBLE, i, TAG_LINE_SEARCH_RESULT,
-         * MPI_COMM_WORLD); */
-        /* } */
+        MPI_Bcast(us, num_vectors, MPI_DOUBLE, 0, MPI_COMM_WORLD);
         // Send the us_prev for the next iteration
         MPI_Isend(us, num_vectors, MPI_DOUBLE, 0, TAG_US_PREV, MPI_COMM_WORLD,
                   &request);
     } else {
         // Worker process
         // Send u's data to master process
-        // use MPI_Gather
-        /* MPI_Send(&u->value, 1, MPI_DOUBLE, 0, TAG_DATA_TO_MASTER,
-         * MPI_COMM_WORLD); */
+        MPI_Gather(&u->value, 1, MPI_DOUBLE, NULL, num_vectors, MPI_DOUBLE, 0, MPI_COMM_WORLD);
         // Receive the result of the line search
         // Update variables in the vector
-        // use MPI_Gather
-        /* MPI_Recv(&u->value, 1, MPI_DOUBLE, 0, TAG_LINE_SEARCH_RESULT,
-         * MPI_COMM_WORLD, &status); */
+        double *recv_buffer = malloc(sizeof(double) * num_vectors);
+        MPI_Bcast(recv_buffer, num_vectors, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+        u->value = recv_buffer[index];
     }
 
     return 0;
