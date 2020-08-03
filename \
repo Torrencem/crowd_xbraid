@@ -184,7 +184,6 @@ int my_Access(braid_App app, braid_Vector u, braid_AccessStatus astatus) {
 
 int my_Sync(braid_App app, braid_SyncStatus status) {
     MPI_Status mpi_status;
-    MPI_Request request;
     int num_vectors;
     int level;
     // The lower and upper indices in time that our proccess has computed
@@ -214,8 +213,6 @@ int my_Sync(braid_App app, braid_SyncStatus status) {
     _braid_Grid *grid = grids[level];
     braid_BaseVector *almost = grid->ua;
     for (int i = 0; i < my_num_values; i++) {
-        assert(almost != NULL);
-        assert(almost[i] != NULL);
         us[i] = almost[i]->userVector;
     }
 
@@ -262,7 +259,6 @@ int my_Sync(braid_App app, braid_SyncStatus status) {
         // Send us_prev for next iteration of loop
         MPI_Isend(us_combined, num_vectors, MPI_DOUBLE, 0, TAG_US_PREV, MPI_COMM_WORLD, &request);
         // Send updated us_combined to workers
-        MPI_Bcast(us_combined, num_vectors, MPI_DOUBLE, 0, MPI_COMM_WORLD);
         free(us_combined);
     } else {
         // Worker process
@@ -275,15 +271,7 @@ int my_Sync(braid_App app, braid_SyncStatus status) {
             dmessage[i] = us[i]->value;
         }
         MPI_Send(message, safe_message_size, MPI_BYTE, 0, TAG_DATA_TO_MASTER, MPI_COMM_WORLD);
-        free(message);
         // Receive updated us values
-        double *updated_us = malloc(sizeof(double) * num_vectors);
-        MPI_Bcast(updated_us, num_vectors, MPI_DOUBLE, 0, MPI_COMM_WORLD);
-        // Put them back into us
-        for (int i = 0; i < my_num_values; i++) {
-            us[i]->value = updated_us[i + lower_t];
-        }
-        free(updated_us);
     }
 
     free(us);
@@ -357,14 +345,14 @@ int main(int argc, char *argv[]) {
                my_Step, my_Init, my_Clone, my_Free, my_Sum, my_SpatialNorm,
                my_Access, my_BufSize, my_BufPack, my_BufUnpack, &core);
 
+    /* For our custom line searching */
+    braid_SetSync(core, my_Sync);
+
     /* Set some typical Braid parameters */
     braid_SetPrintLevel(core, 2);
     braid_SetMaxLevels(core, 2);
     braid_SetAbsTol(core, 1.0e-06);
     braid_SetCFactor(core, -1, 2);
-
-    /* For our custom line searching */
-    braid_SetSync(core, my_Sync);
 
     /* Run simulation, and then clean up */
     braid_Drive(core);
