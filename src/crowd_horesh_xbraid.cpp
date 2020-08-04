@@ -189,7 +189,7 @@ MyBraidApp::MyBraidApp(MPI_Comm comm_t_, int rank_, double tstart_,
  * TriMGRIT wrapper routines
  *--------------------------------------------------------------------------*/
 
-/* Compute A(u) - f */
+/* Compute r = A(r) - f */
 
 int MyBraidApp::TriResidual(braid_Vector uleft_, braid_Vector uright_,
                             braid_Vector f_, braid_Vector r_,
@@ -292,7 +292,7 @@ int MyBraidApp::TriResidual(braid_Vector uleft_, braid_Vector uright_,
         drho_right.setZero();
     }
 
-    if (f == nullptr) {
+    /*if (f == nullptr) {
         BraidVector f(mspace);
         r->dm = Pi * f.dm + K.transpose() * f.dlambda + nabla_m_i;
         Vector tmp1 = Qi * f.drho + dlambda_left / dt - f.dlambda / dt;
@@ -304,8 +304,17 @@ int MyBraidApp::TriResidual(braid_Vector uleft_, braid_Vector uright_,
             Qi * f->drho + dlambda_left / dt - f->dlambda / dt + nabla_rho_i;
         r->dlambda =
             K * f->dm + drho_right / dt - f->drho / dt + nabla_lambda_i;
+    }*/
+    r->dm = Pi * r->dm + K.transpose() * r->dlambda + nabla_m_i;
+    r->drho =
+        Qi * r->drho + dlambda_left / dt - r->dlambda / dt + nabla_rho_i;
+    r->dlambda =
+        K * r->dm + drho_right / dt - r->drho / dt + nabla_lambda_i;
+    if (f != nullptr){
+        r->dm = r->dm - f->dm;
+        r->drho = r->drho - f->drho;
+        r->dlambda = r->dlambda - f->dlambda;
     }
-
     return 0;
 }
 
@@ -425,9 +434,9 @@ int MyBraidApp::TriSolve(braid_Vector uleft_, braid_Vector uright_,
         // Compute delta_lambda_i
         // Equation 24
         if (index != 0) {
-            Vector nabla_m_i = this->compute_GwMi(index - 1);
+            Vector nabla_m_i = this->compute_GwMi(index);
             Vector nabla_lambda_i = this->compute_GwLi(index);
-            Vector nabla_rho_i = this->compute_GwRhoi(index - 1);
+            Vector nabla_rho_i = this->compute_GwRhoi(index);
             Vector delta_lambda_im1;
             delta_lambda_im1 = uleft->dlambda;
             Vector delta_rho_ip1;
@@ -444,7 +453,9 @@ int MyBraidApp::TriSolve(braid_Vector uleft_, braid_Vector uright_,
             Vector b = dt * Qi * K * invertDiagonal(Pi) * nabla_m_i -
                        Qi * delta_rho_ip1 - dt * Qi * nabla_lambda_i -
                        delta_lambda_im1 / dt - nabla_rho_i;
-            u->dlambda = invertDiagonal(A) * b;
+            Eigen::BiCGSTAB<Sparse, Eigen::IncompleteLUT<double>> solver;
+            solver.compute(A);
+            u->dlambda = solver.solve(b);
             if (index != final_index) { // Otherwise delta_m doesn't matter
                 Vector nabla_m_i = this->compute_GwMi(index);
                 // Setup Ax = b system
@@ -488,6 +499,8 @@ int MyBraidApp::Init(double t, braid_Vector *u_ptr_) {
     dm.setConstant(0.0);
     drho.setConstant(0.0);
     dlambda.setConstant(0.0);
+
+    dlambda.setRandom();
 
     *u_ptr = new BraidVector(dm, drho, dlambda);
 
@@ -550,14 +563,13 @@ int MyBraidApp::Access(braid_Vector u_, BraidAccessStatus &astatus) {
 
     int done, index;
 
-    std::cout << "drho is " << u->drho << std::endl;
-    std::cout << "dm is " << u->dm << std::endl;
-    std::cout << "dlambda is " << u->dlambda << std::endl;
-
     astatus.GetDone(&done);
     if (done) {
         astatus.GetTIndex(&index);
-        std::cout << "From index " << index << std::endl;
+        std::cout << "At index " << index << std::endl;
+        std::cout << "drho is " << u->drho << std::endl;
+        std::cout << "dm is " << u->dm << std::endl;
+        std::cout << "dlambda is " << u->dlambda << std::endl;
 
         MPI_Request send_request;
         int message_size = sizeof(int) * 2 + sizeof(double) * (mspace + 2);
@@ -704,8 +716,8 @@ int main(int argc, char *argv[]) {
     /* Define some Braid parameters */
     max_levels = 1;
     min_coarse = 1;
-    nrelax = 1;
-    nrelaxc = 1;
+    nrelax = 10;
+    nrelaxc = 10;
     maxiter = 5;
     cfactor = 2;
     tol = 1.0e-6;
@@ -764,7 +776,7 @@ int main(int argc, char *argv[]) {
     app.rho.push_back(Vector(DRHO_LEN_SPACE));
     for (int i = 0; i < DRHO_LEN_TIME; i++) {
         Vector rho_val(DRHO_LEN_SPACE);
-        rho_val.setConstant(0.5);
+        rho_val.setConstant(0.6);
         app.rho.push_back(rho_val);
     }
 
@@ -780,7 +792,7 @@ int main(int argc, char *argv[]) {
     double accumulator = 0.0;
     Vector q_val(Q_LEN_SPACE);
     for (int i = 0; i < mspace; i++) {
-        q_val[i] = initial_condition(accumulator);
+        q_val[i] = 0.5; // initial_condition(accumulator);
         accumulator += 1.0 / ((double)mspace - 1.0);
     }
     app.q[0] = q_val / d_time;
@@ -789,10 +801,11 @@ int main(int argc, char *argv[]) {
         app.q[i] = q_val * 0.0;
     }
 
+
     accumulator = 0.0;
     q_val = Vector(mspace);
     for (int i = 0; i < mspace; i++) {
-        q_val[i] = final_condition(accumulator);
+        q_val[i] = -0.5; // * final_condition(accumulator);
         accumulator += 1.0 / ((double)mspace - 1.0);
     }
     app.q[app.q.size() - 1] = q_val / d_time;

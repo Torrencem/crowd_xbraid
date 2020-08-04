@@ -15,18 +15,17 @@ global At
 global As
 global filler_zeros
 
-space_steps = 40;
-time_steps = 40;
+space_steps = 4;
+time_steps = 4;
 show = @(x) surf(reshape(x, [space_steps, time_steps+1]));
 showm = @(x) surf(reshape(x, [space_steps+1, time_steps]));
 showl = @(x) surf(reshape(x, [space_steps, time_steps+2]));
 
 m = zeros((space_steps + 1) * time_steps, 1);
-rho = ones(space_steps * (time_steps + 1), 1) * 0.5;
-lambda = ones(space_steps * (time_steps + 2), 1) * 0.5;
+rho = ones(space_steps * (time_steps + 1), 1) * 0.6;
+lambda = ones(space_steps * (time_steps + 2), 1) * 0.1;
 q = zeros(space_steps * (time_steps + 2), 1);
-
-expodist = @(x, k) (2^(80*(1/(1+(x-k)^2)-1)));
+expodist = @(x, k) (2^(1/(1+(x-k)^2)-1))^80;
 
 time = 1;
 d_time = time/time_steps;
@@ -36,8 +35,8 @@ d_space = 1/space_steps;
 %q(space_steps * (time_steps + 1)+ 1 : space_steps * (time_steps + 3/2)) = ones(space_steps/2, 1);
 %q(space_steps * (time_steps + 3/2) + 1 : space_steps * (time_steps + 2)) = zeros(space_steps/2, 1) + 0.1;
 
-q(1:space_steps) = arrayfun(@(x) 0.8*expodist(x, 0.3) + 0.3*expodist(x, 0.7), 0:1/(space_steps-1):1);
-q(space_steps * (time_steps + 1) + 1: space_steps * (time_steps + 2)) = -1*arrayfun(@(x) 0.3*expodist(x, 0.3) + 0.8*expodist(x, 0.7), 0:1/(space_steps-1):1);
+q(1:space_steps) = arrayfun(@(x) 0.5, 0:1/(space_steps-1):1);
+q(space_steps * (time_steps + 1) + 1: space_steps * (time_steps + 2)) = -1*arrayfun(@(x) 0.5, 0:1/(space_steps-1):1);
 
 q = q * (1/d_time);
 
@@ -47,7 +46,7 @@ if abs(sum(q(1:space_steps)) + sum(q(space_steps * (time_steps + 1) + 1: space_s
     disp("Conservation of mass is false.  This is not a problem, but might lead to seemingly strange behaviour.");
 end
 
-iters = 10;
+iters = 1;
 for i=1:iters
     recalc_matrices(m, rho)
 
@@ -60,6 +59,7 @@ for i=1:iters
     dm = solution(1 : (space_steps + 1) * time_steps);
     drho = solution((space_steps + 1) * time_steps + 1 : (space_steps + 1) * time_steps + space_steps * (time_steps + 1));
     dlambda = solution((space_steps + 1) * time_steps + space_steps * (time_steps + 1) + 1 : length(solution));
+
     alpha = line_search(dm, drho, dlambda);
     
     m = m + alpha * dm;
@@ -160,7 +160,7 @@ function A = get_A_hat(m, rho)
     vec_1 = 2 * As' * At * (1./rho);
     vec_2 = 2 * At' * As * (m.^2);
     vec_3 = 1./(rho.^3);
-    A = spdiags([vec_1;vec_2.*vec_3],0,length(vec_1)+length(vec_2),length(vec_1)+length(vec_2));
+    A = blkdiag(diag(vec_1), diag(vec_2) * diag(vec_3));
 end
 
 function GwL = get_GwL(m, rho, lambda)
@@ -168,8 +168,8 @@ function GwL = get_GwL(m, rho, lambda)
     global At
     global D1
     global D2
-    GmL = 2 * spdiags(m,0,length(m),length(m)) * As' * At * (1./rho) + D1' * lambda;
-    GrhoL = -spdiags(1./(rho.^2),0,length(rho),length(rho)) * At' * As * (m.^2) + D2' * lambda;
+    GmL = 2 * diag(m) * As' * At * (1./rho) + D1' * lambda;
+    GrhoL = -diag(1./(rho.^2)) * At' * As * (m.^2) + D2' * lambda;
     GwL = [GmL; GrhoL];
 end
 
@@ -186,7 +186,7 @@ function reward = reward(x, dm, drho, dlambda)
     newm = m + x * dm;
     newrho = rho + x * drho;
     newlambda = lambda + x * dlambda;
-    %recalc_matrices(newm, newrho)
+    recalc_matrices(newm, newrho)
     b = -[get_GwL(newm, newrho, newlambda); get_GlambdaL(newm, newrho)];
     reward = norm(b);
 end
