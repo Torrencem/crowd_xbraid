@@ -347,8 +347,9 @@ int MyBraidApp::TriSolve(braid_Vector uleft_, braid_Vector uright_,
 
     status.GetTIndex(&index);
     status.GetNTPoints(&final_index);
-    final_index -= 1;
+//    final_index -= 1;
 
+//    std::cout << "Index " << index << " and final index " << final_index << std::endl;
     Sparse X((mspace + 1), mspace);
 
     for (int i = 0; i < mspace; i++) {
