@@ -109,6 +109,10 @@ crowd_horesh_xbraid: src/crowd_horesh_xbraid.cpp
 	@echo "Building" $@ "..."
 	$(MPICXX) $(CXXFLAGS) $(BRAID_FLAGS) -o crowd_horesh_xbraid src/crowd_horesh_xbraid.cpp -I $(EIGEN_DIR) $(BRAID_LIB_FILE) $(LFLAGS) $(EXTRAFLAGS)
 
+crowd_horesh_xbraid_dirty_hacks: src/crowd_horesh_xbraid_dirty_hacks.cpp
+	@echo "Building" $@ "..."
+	$(MPICXX) $(CXXFLAGS) $(BRAID_FLAGS) -o crowd_horesh_xbraid_dirty_hacks src/crowd_horesh_xbraid_dirty_hacks.cpp -I $(EIGEN_DIR) $(BRAID_LIB_FILE) $(LFLAGS) $(EXTRAFLAGS)
+
 crowd_horesh: src/crowd_horesh.cpp
 	@echo "Building" $@ "..."
 	$(MPICXX) $(CXXFLAGS) -o crowd_horesh src/crowd_horesh.cpp -I $(EIGEN_DIR) $(EXTRAFLAGS) -Wextra -std=c++14
@@ -119,12 +123,15 @@ run_horesh: crowd_horesh
 run_horesh_xbraid: crowd_horesh_xbraid
 	./crowd_horesh_xbraid
 
+run_horesh_hacks: crowd_horesh_xbraid_dirty_hacks
+	./crowd_horesh_xbraid_dirty_hacks
+
 run_ex_01_mod: ex-01-mod
 	./ex-01-mod
 
 clean:
 	rm -f *.out.*
-	rm -f *.o crowd_horesh crowd_horesh_xbraid ex-01-mod
+	rm -f *.o crowd_horesh crowd_horesh_xbraid crowd_horesh_xbraid_dirty_hacks ex-01-mod
 
 fmt: src/*.c src/*.cpp
 	for file in $^ ; do \
