@@ -111,7 +111,7 @@ crowd_horesh_xbraid: src/crowd_horesh_xbraid.cpp
 
 crowd_horesh: src/crowd_horesh.cpp
 	@echo "Building" $@ "..."
-	clang++ $(CXXFLAGS) -o crowd_horesh src/crowd_horesh.cpp -I $(EIGEN_DIR) $(EXTRAFLAGS) -Wextra -std=c++14
+	$(MPICXX) $(CXXFLAGS) -o crowd_horesh src/crowd_horesh.cpp -I $(EIGEN_DIR) $(EXTRAFLAGS) -Wextra -std=c++14
 
 run_horesh: crowd_horesh
 	./crowd_horesh
