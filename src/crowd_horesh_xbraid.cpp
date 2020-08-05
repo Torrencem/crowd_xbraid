@@ -305,11 +305,11 @@ int MyBraidApp::TriResidual(braid_Vector uleft_, braid_Vector uright_,
         r->dlambda =
             K * f->dm + drho_right / dt - f->drho / dt + nabla_lambda_i;
     }*/
-    r->dm = Pi * r->dm + K.transpose() * r->dlambda + nabla_m_i;
+    r->dm = Pi * r->dm + K.transpose() * r->dlambda;
     r->drho =
-        Qi * r->drho + dlambda_left / dt - r->dlambda / dt + nabla_rho_i;
+        Qi * r->drho + dlambda_left / dt - r->dlambda / dt;
     r->dlambda =
-        K * r->dm + drho_right / dt - r->drho / dt + nabla_lambda_i;
+        K * r->dm + drho_right / dt - r->drho / dt;
     if (f != nullptr){
         r->dm = r->dm - f->dm;
         r->drho = r->drho - f->drho;
