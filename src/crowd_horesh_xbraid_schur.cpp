@@ -88,9 +88,9 @@ class MyBraidApp : public TriBraidApp {
     double dx;
     double normcoeff;
     FILE *ufile, *vfile, *wfile;
-    std::vector<Vector> m, rho, lambda, q, RHS;
+    std::vector<Vector> m, rho, lambda, q;
     Sparse K, X;
-    Vector GlambdaL, GmL, GrhoL;
+    Vector GlambdaL, GmL, GrhoL, RHS;
 
     // Main constructor
     MyBraidApp(MPI_Comm comm_t__, int rank_, double tstart_ = 0.0,
@@ -132,9 +132,9 @@ class MyBraidApp : public TriBraidApp {
                           BraidBufferStatus &bstatus) override;
     
 
-    Sparse computeP(int index);
-    Sparse computeQ(int index);
-    Vector get_RHS(int index);
+    const Sparse computeP(const int index);
+    const Sparse computeQ(const int index);
+    const Vector get_RHS(const int index);
     // Not needed
     virtual int Residual(braid_Vector u_, braid_Vector r_,
                          BraidStepStatus &pstatus) override {
@@ -145,11 +145,11 @@ class MyBraidApp : public TriBraidApp {
                            const double dt);
 
     // Compute \nabla_m_i
-    const Vector compute_GwMi(int index);
+    const Vector compute_GwMi(const int index);
     // Compute \nabla_\lambda_i
-    const Vector compute_GwLi(int index);
+    const Vector compute_GwLi(const int index);
     // Compute \nabla_\rho_{i - 1/2}
-    const Vector compute_GwRhoi(int index);
+    const Vector compute_GwRhoi(const int index);
 };
 
 const Vector MyBraidApp::get_RHS(int index) {
@@ -164,7 +164,7 @@ const Vector MyBraidApp::compute_GwMi(int index) {
     return res_;
 }
 
-const Vector MyBraidApp::compute_GwLi(int index) {
+const Vector MyBraidApp::compute_GwLi(const int index) {
     Eigen::Map<Vector> res(this->GlambdaL.data() + (index * DLAMBDA_LEN_SPACE),
                            DLAMBDA_LEN_SPACE);
 
@@ -172,20 +172,12 @@ const Vector MyBraidApp::compute_GwLi(int index) {
     return res_;
 }
 
-const Vector MyBraidApp::compute_GwRhoi(int index) {
+const Vector MyBraidApp::compute_GwRhoi(const int index) {
     Eigen::Map<Vector> res(this->GrhoL.data() + (index * DRHO_LEN_SPACE),
                            DRHO_LEN_SPACE);
 
     Vector res_(res);
     return res_;
-}
-
-const Vector MyBraidApp::compute_GwWi(int index) {
-    Vector GwMi = compute_GwMi(index);
-    Vector GwRhoi = compute_GwRhoi(index);
-    Vector res = Vector(GwMi.size() + GwRhoi.size());
-    res << GwMi, GwRhoi;
-    return res;
 }
 
 MyBraidApp::MyBraidApp(MPI_Comm comm_t_, int rank_, double tstart_,
@@ -198,7 +190,7 @@ MyBraidApp::MyBraidApp(MPI_Comm comm_t_, int rank_, double tstart_,
  * TriMGRIT wrapper routines
  *--------------------------------------------------------------------------*/
 
-Sparse MyBraidApp::computeP(int index){
+const Sparse MyBraidApp::computeP(int index){
     Vector tmp1(DRHO_LEN_SPACE);
     tmp1.setZero();
     if (index != 0) {
@@ -214,12 +206,12 @@ Sparse MyBraidApp::computeP(int index){
     return Sparse(Pi_);
 }
 
-Sparse MyBraidApp::computeQ(int index){
+const Sparse MyBraidApp::computeQ(int index){
 
     Vector mi(DM_LEN_SPACE);
 
     if (index == DM_LEN_TIME) {
-        mi.setZero();        
+        mi.setZero();
     } else {
         mi = m[index];
     }
@@ -241,7 +233,7 @@ Sparse MyBraidApp::computeQ(int index){
     Qi_.setConstant(2.0);
     Qi_ = Qi_.cwiseProduct(tmp3).cwiseProduct(tmp4);
     auto Qi__ = Qi_.asDiagonal();
-    Sparse normalizer(Qi_.size(), Qi.size());
+    Sparse normalizer(Qi_.size(), Qi_.size());
     normalizer.setIdentity();
     return Sparse(Qi__) + normcoeff * normalizer;
 }
@@ -272,8 +264,6 @@ int MyBraidApp::TriResidual(braid_Vector uleft_, braid_Vector uright_,
     } else {
         dt = t - tprev;
     }
-    
-    
 
     if (index == 0){
         Sparse Q0 = invertDiagonal(computeQ(0))/(dt*dt);
@@ -288,7 +278,7 @@ int MyBraidApp::TriResidual(braid_Vector uleft_, braid_Vector uright_,
         r->dlambda = -Qim1*uleft->dlambda + (Qi+Qim1+KPiKt)*r->dlambda - Qi*uright->dlambda;
     }
 
-    Vector RHS = //TODO.
+    Vector RHS = ;//TODO.
     
     r->dlambda = r->dlambda - RHS - f->dlambda;
 
@@ -307,10 +297,9 @@ int MyBraidApp::TriSolve(braid_Vector uleft_, braid_Vector uright_,
     BraidVector *uright = (BraidVector *)uright_;
     BraidVector *f = (BraidVector *) f_;
     BraidVector *u = (BraidVector *)u_;
+    BraidVector r = *u;
 
-    Clone(u_, &r_); //TODO: Ask Matt if this is right.
-    TriResidual(uleft_, uright_, f_, r_, status);
-    BraidVector *r = (BraidVector *)r_;
+    TriResidual(uleft_, uright_, f_, (braid_Vector) &r, status);
     
     double t, tprev, tnext, dt;
 
@@ -343,7 +332,7 @@ int MyBraidApp::TriSolve(braid_Vector uleft_, braid_Vector uright_,
 
     Eigen::BiCGSTAB<Sparse, Eigen::IncompleteLUT<double>> solver;
     solver.compute(C);
-    u->dlambda = u->dlambda - solver.solve(r->dlambda);
+    u->dlambda = u->dlambda - solver.solve(r.dlambda);
     /* no refinement */
     status.SetRFactor(1);
 
@@ -615,8 +604,8 @@ int main(int argc, char *argv[]) {
     }
 
     for (int i = 0; i < mspace; i++) {
-        X.insert(i, i) = 0.25;
-        X.insert(i + 1, i) = 0.25;
+        app.X.insert(i, i) = 0.25;
+        app.X.insert(i + 1, i) = 0.25;
     }
 
     Vector q_long(app.q.size() * app.q[0].size());
@@ -701,14 +690,14 @@ int main(int argc, char *argv[]) {
                 }
             }
             Vector dm_RHS = D2.transpose() * dlambda_long;
-            Vector dm_long(dm.size() * dm[0].size());
-            for (unsigned long i=0; i < dm.size(); i++) {
-                dm_long(Eigen::seq(i*DM_LEN_SPACE, (i+1)*DM_LEN_SPACE - 1)) << invertDiagonal(computeP(i)) * dm_RHS(Eigen::seq(i*DM_LEN_SPACE, (i+1)*DM_LEN_SPACE - 1));
+            Vector dm_long(DM_LEN_TIME * DM_LEN_SPACE);
+            for (int i = 0; i < DM_LEN_TIME; i++) {
+                dm_long(Eigen::seq(i*DM_LEN_SPACE, (i+1)*DM_LEN_SPACE - 1)) << invertDiagonal(app.computeP(i)) * dm_RHS(Eigen::seq(i*DM_LEN_SPACE, (i+1)*DM_LEN_SPACE - 1));
             }
             Vector drho_RHS = D1.transpose() * dlambda_long;
-            Vector drho_long(drho.size() * drho[0].size());
-            for (unsigned long i=0; i < drho.size(); i++) {
-                drho_long(Eigen::seq(i*DRHO_LEN_SPACE, (i+1)*DRHO_LEN_SPACE - 1)) << invertDiagonal(computeQ(i)) * drho_RHS(Eigen::seq(i*DRHO_LEN_SPACE, (i+1)*DRHO_LEN_SPACE - 1);
+            Vector drho_long(DRHO_LEN_TIME * DRHO_LEN_SPACE);
+            for (int i = 0; i < DRHO_LEN_TIME; i++) {
+                drho_long(Eigen::seq(i*DRHO_LEN_SPACE, (i+1)*DRHO_LEN_SPACE - 1)) << invertDiagonal(app.computeQ(i)) * drho_RHS(Eigen::seq(i*DRHO_LEN_SPACE, (i+1)*DRHO_LEN_SPACE - 1));
             }
             double alpha =
                 line_search(dm_long, drho_long, dlambda_long, m_long, rho_long,
