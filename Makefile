@@ -112,9 +112,9 @@ crowd_horesh_xbraid: src/crowd_horesh_xbraid.cpp
 	@echo "Building" $@ "..."
 	$(MPICXX) $(CXXFLAGS) $(BRAID_FLAGS) -o crowd_horesh_xbraid src/crowd_horesh_xbraid.cpp -I $(EIGEN_DIR) $(BRAID_LIB_FILE) $(LFLAGS) $(EXTRAFLAGS)
 
-crowd_horesh_xbraid_dirty_hacks: src/crowd_horesh_xbraid_dirty_hacks.cpp
+crowd_horesh_xbraid_schur: src/crowd_horesh_xbraid_schur.cpp
 	@echo "Building" $@ "..."
-	$(MPICXX) $(CXXFLAGS) $(BRAID_FLAGS) -o crowd_horesh_xbraid_dirty_hacks src/crowd_horesh_xbraid_dirty_hacks.cpp -I $(EIGEN_DIR) $(BRAID_LIB_FILE) $(LFLAGS) $(EXTRAFLAGS)
+	$(MPICXX) $(CXXFLAGS) $(BRAID_FLAGS) -o crowd_horesh_xbraid_schur src/crowd_horesh_xbraid_schur.cpp -I $(EIGEN_DIR) $(BRAID_LIB_FILE) $(LFLAGS) $(EXTRAFLAGS)
 
 crowd_horesh: src/crowd_horesh.cpp
 	@echo "Building" $@ "..."
@@ -126,8 +126,8 @@ run_horesh: crowd_horesh
 run_horesh_xbraid: crowd_horesh_xbraid
 	./crowd_horesh_xbraid
 
-run_horesh_hacks: crowd_horesh_xbraid_dirty_hacks
-	./crowd_horesh_xbraid_dirty_hacks
+run_horesh_schur: crowd_horesh_xbraid_schur
+	./crowd_horesh_xbraid_schur
 
 run_ex_01_mod: ex-01-mod
 	./ex-01-mod
