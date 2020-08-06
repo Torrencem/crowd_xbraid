@@ -278,7 +278,7 @@ int MyBraidApp::TriResidual(braid_Vector uleft_, braid_Vector uright_,
         r->dlambda = -Qim1*uleft->dlambda + (Qi+Qim1+KPiKt)*r->dlambda - Qi*uright->dlambda;
     }
 
-    Vector RHS = ;//TODO.
+    Vector RHS = get_RHS(index);
     
     r->dlambda = r->dlambda - RHS - f->dlambda;
 
@@ -293,9 +293,6 @@ int MyBraidApp::TriSolve(braid_Vector uleft_, braid_Vector uright_,
                          braid_Vector fleft_, braid_Vector fright_,
                          braid_Vector f_, braid_Vector u_,
                          BraidTriStatus &status) {
-    BraidVector *uleft = (BraidVector *)uleft_;
-    BraidVector *uright = (BraidVector *)uright_;
-    BraidVector *f = (BraidVector *) f_;
     BraidVector *u = (BraidVector *)u_;
     BraidVector r = *u;
 
@@ -515,7 +512,7 @@ int main(int argc, char *argv[]) {
 
     /* Set up the app structure */
     // ntime + 1 for the 2 extra time points caused by the staggered grid
-    auto app = MyBraidApp(MPI_COMM_WORLD, rank, tstart, tstop, ntime);
+    auto app = MyBraidApp(MPI_COMM_WORLD, rank, tstart, tstop, ntime + 1);
     app.myid = rank;
     app.ntime = ntime;
     app.mspace = mspace;
@@ -579,7 +576,6 @@ int main(int argc, char *argv[]) {
     for (int i = 1; i < ntime + 1; i++) {
         app.q[i] = q_val * 0.0;
     }
-
 
     accumulator = 0.0;
     q_val = Vector(mspace);
@@ -649,8 +645,18 @@ int main(int argc, char *argv[]) {
                             .asDiagonal() *
                         (-At.transpose()) * As * m_long.cwiseProduct(m_long) +
                     D2.transpose() * lambda_long + app.normcoeff * rho_long;
-        
-        
+
+        Vector RHS_m(m_long.size());
+        for(int i = 0; i < DM_LEN_TIME; i++){
+            auto sequence = Eigen::seq(i*DM_LEN_SPACE, (i+1)*DM_LEN_SPACE-1);
+            RHS_m(sequence) << invertDiagonal(app.computeP(i)) * app.GmL(sequence);
+        } 
+        Vector RHS_rho(rho_long.size());
+        for(int i = 0; i < DRHO_LEN_TIME; i++){
+            auto sequence = Eigen::seq(i*DRHO_LEN_SPACE, (i+1)*DRHO_LEN_SPACE-1);
+            RHS_rho(sequence) << invertDiagonal(app.computeQ(i)) * app.GrhoL(sequence);
+        }
+        app.RHS = D1 * RHS_m + D2 * RHS_rho - app.GlambdaL;
 
         core.Drive();
 
@@ -707,10 +713,10 @@ int main(int argc, char *argv[]) {
                    alpha);
 
             for (unsigned long i = 1; i < app.m.size(); i++) {
-                app.m[i] += alpha * dm[i - 1];
+                app.m[i] += alpha * dm_long(Eigen::seq(i*DM_LEN_SPACE, (i+1)*DM_LEN_SPACE - 1));
             }
             for (unsigned long i = 1; i < app.rho.size(); i++) {
-                app.rho[i] += alpha * drho[i - 1];
+                app.rho[i] += alpha * drho_long(Eigen::seq(i*DRHO_LEN_SPACE, (i+1)*DRHO_LEN_SPACE - 1));
             }
             for (unsigned long i = 0; i < app.lambda.size(); i++) {
                 app.lambda[i] += alpha * dlambda[i];
