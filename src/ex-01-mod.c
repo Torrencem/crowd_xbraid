@@ -62,11 +62,8 @@
 #include <string.h>
 #include <assert.h>
 
-#include "_braid.h"
-
-#define TAG_DATA_TO_MASTER 2
-#define TAG_LINE_SEARCH_RESULT 3
-#define TAG_US_PREV 4
+#include "braid.h"
+#include "line_search.c"
 
 /*--------------------------------------------------------------------------
  * User-defined routines and structures
@@ -140,188 +137,10 @@ int my_SpatialNorm(braid_App app, braid_Vector u, double *norm_ptr) {
     return 0;
 }
 
-// --- LINE SEARCH STUFF ---
-
-double objective(double alpha, double *us_prev, double *us, int len, int level,
-                 braid_App app, braid_Core core) {
-    double result = 0.0;
-    for (int i = 0; i < len; i++) {
-        my_Vector r_;
-        my_Vector ustop_;
-        struct _braid_BaseVector_struct ustop;
-        struct _braid_BaseVector_struct r;
-        ustop_.value = alpha * us_prev[i] + (1 - alpha) * us[i];
-        ustop.userVector = (braid_Vector) &ustop_;
-        ustop.bar = NULL;
-        r.userVector = (braid_Vector) &r_;
-        r.bar = NULL;
-        // TODO: i * coarsening factor??
-        _braid_Residual(core, level, i * 2, &ustop, &r);
-        result += r.userVector->value * r.userVector->value;
-    }
-    return result;
-}
-
-typedef double (*Objective)(double, double *, double *, int, int, braid_App, braid_Core);
-
-double line_search(Objective f, double *us_prev, double *us, int len, int level,
-                   braid_App app, braid_Core status) {
-    /* return 0.0; */
-    double a = 0.0;
-    double b = 1.0;
-    double gr = (1.0 + sqrt(5.0)) / 2.0;
-    double c = b - (b - a) / gr;
-    double d = a + (b - a) / gr;
-    while (fabs(c - d) > 0.00001) {
-        if (f(c, us_prev, us, len, level, app, status) < f(d, us_prev, us, len, level, app, status)) {
-            b = d;
-        } else {
-            a = c;
-        }
-        c = b - (b - a) / gr;
-        d = a + (b - a) / gr;
-    }
-    return (a + b) / 2;
-}
-
-// --- END LINE SEARCH STUFF ---
-
 int my_Access(braid_App app, braid_Vector u, braid_AccessStatus astatus) {
     return 0;
 }
 
-int my_Sync(braid_App app, braid_SyncStatus status) {
-    MPI_Status mpi_status;
-    MPI_Request request;
-    int num_vectors;
-    int level;
-    // The lower and upper indices in time that our proccess has computed
-    int lower_t, upper_t;
-    int num_procesors;
-    int num_total_points, c_factor;
-
-    MPI_Comm_size(MPI_COMM_WORLD, &num_procesors);
-
-    braid_SyncStatusGetLevel(status, &level);
-
-    braid_SyncStatusGetNTPoints(status, &num_total_points);
-    _braid_GetCFactor((braid_Core) status, level, &c_factor);
-    
-    if (level != 0) {
-        return 0;
-    }
-
-    num_vectors = num_total_points / c_factor;
-    
-    // Collect us - the vectors for our process
-    _braid_Grid **grids = _braid_StatusElt(status, grids);
-    _braid_Grid *grid = grids[level];
-    upper_t = grid->cupper / c_factor;
-    lower_t = grid->clower / c_factor;
-
-    int safe_message_size =
-        (num_vectors / num_procesors + 2) * sizeof(double) + 2 * sizeof(int);
-
-    int my_num_values = upper_t - lower_t; // Assuming upper_t is not inclusive
-
-    printf("There should be %d total C points, but I'm only responsible for %d\n", num_vectors, my_num_values);
-
-    assert(2 * sizeof(int) + my_num_values * sizeof(double) <= (unsigned long) safe_message_size);
-    
-    braid_Vector *us = malloc(sizeof(braid_Vector) * my_num_values);
-
-    /* braid_BaseVector *almost = grid->ua; */
-    for (int i = 0; i < my_num_values; i++) {
-        /* assert(almost != NULL); */
-        /* assert(almost[i] != NULL); */
-        int fine_index;
-        _braid_MapCoarseToFine(lower_t + i, c_factor, fine_index);
-
-        braid_BaseVector base_v;
-
-        _braid_UGetVectorRef((braid_Core) status, level, fine_index, &base_v);
-
-        assert(base_v != NULL);
-
-        us[i] = base_v->userVector;
-    }
-
-    // Now that we have us...
-
-    if (app->rank == 0) {
-        // Master process
-        // Receive all other vectors
-        double *us_combined = malloc(sizeof(double) * num_vectors);
-        // handle our own us
-        for (int i = lower_t; i < upper_t; i++) {
-            us_combined[i] = us[i]->value;
-        }
-        for (int i = 0; i < num_procesors - 1; i++) {
-            // Received message:
-            // (int: the start index (lower_t)) : (int: the number of us (upper_t - lower_t)) : doubles (us)
-            char *message = malloc(safe_message_size);
-            MPI_Recv(message, safe_message_size, MPI_BYTE, MPI_ANY_SOURCE, TAG_DATA_TO_MASTER, MPI_COMM_WORLD, &mpi_status);
-            // Finagle the message
-            int start_index = ((int *) message)[0];
-            int us_len = ((int *) message)[1];
-            double *dmessage = (double *) (message + 2 * sizeof(int));
-            for (int i = 0; i < us_len; i++) {
-                us_combined[i + start_index] = dmessage[i];
-            }
-            free(dmessage);
-        }
-        // Perform the line search
-        if (app->first_access) {
-            app->first_access = 0;
-        } else {
-            double *us_prev = malloc(sizeof(double) * num_vectors);
-            // Receive us_prev from previous iteration of access
-            MPI_Recv(us_prev, num_vectors, MPI_DOUBLE, 0, TAG_US_PREV,
-                     MPI_COMM_WORLD, &mpi_status);
-            double alpha =
-                line_search(objective, us_prev, us_combined, num_vectors, level, app, (braid_Core) status);
-            printf("alpha: %f\n", alpha);
-            // ... put result in us_combined
-            for (int i = 0; i < num_vectors; i++) {
-                us_combined[i] = us_prev[i] * (1 - alpha) + us_combined[i] * alpha;
-            }
-
-            // As the main process, we need to update our us[i]'s
-            for (int i = lower_t; i < upper_t; i++) {
-                us[i]->value = us_combined[i];
-            }
-        }
-        // Send us_prev for next iteration of loop
-        MPI_Isend(us_combined, num_vectors, MPI_DOUBLE, 0, TAG_US_PREV, MPI_COMM_WORLD, &request);
-        // Send updated us_combined to workers
-        MPI_Bcast(us_combined, num_vectors, MPI_DOUBLE, 0, MPI_COMM_WORLD);
-        free(us_combined);
-    } else {
-        // Worker process
-        // Send u's data to master process
-        char *message = malloc(safe_message_size);
-        ((int *) message)[0] = lower_t;
-        ((int *) message)[1] = my_num_values;
-        double *dmessage = (double *) (message + 2 * sizeof(int));
-        for (int i = 0; i < my_num_values; i++) {
-            dmessage[i] = us[i]->value;
-        }
-        MPI_Send(message, safe_message_size, MPI_BYTE, 0, TAG_DATA_TO_MASTER, MPI_COMM_WORLD);
-        free(message);
-        // Receive updated us values
-        double *updated_us = malloc(sizeof(double) * num_vectors);
-        MPI_Bcast(updated_us, num_vectors, MPI_DOUBLE, 0, MPI_COMM_WORLD);
-        // Put them back into us
-        for (int i = 0; i < my_num_values; i++) {
-            us[i]->value = updated_us[i + lower_t];
-        }
-        free(updated_us);
-    }
-
-    free(us);
-
-    return 0;
-}
 
 int my_BufSize(braid_App app, int *size_ptr, braid_BufferStatus bstatus) {
     *size_ptr = sizeof(double);
@@ -391,12 +210,12 @@ int main(int argc, char *argv[]) {
 
     /* Set some typical Braid parameters */
     braid_SetPrintLevel(core, 2);
-    braid_SetMaxLevels(core, 2);
+    braid_SetMaxLevels(core, 4);
     braid_SetAbsTol(core, 1.0e-06);
     braid_SetCFactor(core, -1, 2);
 
     /* For our custom line searching */
-    braid_SetSync(core, my_Sync);
+    braid_SetSync(core, line_search_sync);
 
     /* Run simulation, and then clean up */
     braid_Drive(core);
