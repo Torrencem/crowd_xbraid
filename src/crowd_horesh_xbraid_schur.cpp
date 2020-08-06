@@ -88,7 +88,7 @@ class MyBraidApp : public TriBraidApp {
     double dx;
     double normcoeff;
     FILE *ufile, *vfile, *wfile;
-    std::vector<Vector> m, rho, lambda, q;
+    std::vector<Vector> m, rho, lambda, q, RHS;
     Sparse K, X;
     Vector GlambdaL, GmL, GrhoL;
 
@@ -132,8 +132,9 @@ class MyBraidApp : public TriBraidApp {
                           BraidBufferStatus &bstatus) override;
     
 
-    virtual Sparse computeP(int index) override;
-    virtual Sparse computeQ(int index) override;
+    Sparse computeP(int index);
+    Sparse computeQ(int index);
+    Vector get_RHS(int index);
     // Not needed
     virtual int Residual(braid_Vector u_, braid_Vector r_,
                          BraidStepStatus &pstatus) override {
@@ -150,6 +151,10 @@ class MyBraidApp : public TriBraidApp {
     // Compute \nabla_\rho_{i - 1/2}
     const Vector compute_GwRhoi(int index);
 };
+
+const Vector MyBraidApp::get_RHS(int index) {
+    return RHS(Eigen::seq(index*DLAMBDA_LEN_SPACE, (index+1)*DLAMBDA_LEN_SPACE - 1));
+}
 
 const Vector MyBraidApp::compute_GwMi(int index) {
     Eigen::Map<Vector> res(this->GmL.data() + (index * DM_LEN_SPACE),
@@ -252,7 +257,6 @@ int MyBraidApp::TriResidual(braid_Vector uleft_, braid_Vector uright_,
     BraidVector *r = (BraidVector *)r_;
 
     double t, tprev, tnext, dt;
-    int level;
 
     int index, final_index;
 
@@ -261,7 +265,6 @@ int MyBraidApp::TriResidual(braid_Vector uleft_, braid_Vector uright_,
 //    final_index -= 1; //?
 
     status.GetTriT(&t, &tprev, &tnext);
-    status.GetLevel(&level);
 
     /* Get the time-step size */
     if (t < tnext) {
@@ -302,11 +305,13 @@ int MyBraidApp::TriSolve(braid_Vector uleft_, braid_Vector uright_,
                          BraidTriStatus &status) {
     BraidVector *uleft = (BraidVector *)uleft_;
     BraidVector *uright = (BraidVector *)uright_;
-    // BraidVector *f = (BraidVector *) f_;
+    BraidVector *f = (BraidVector *) f_;
     BraidVector *u = (BraidVector *)u_;
-    // BraidVector *fleft = (BraidVector *) fleft_;
-    // BraidVector *fright = (BraidVector *) fright_;
 
+    Clone(u_, &r_); //TODO: Ask Matt if this is right.
+    TriResidual(uleft_, uright_, f_, r_, status);
+    BraidVector *r = (BraidVector *)r_;
+    
     double t, tprev, tnext, dt;
 
     /* Get the time-step size */
@@ -320,6 +325,25 @@ int MyBraidApp::TriSolve(braid_Vector uleft_, braid_Vector uright_,
     int index, final_index;
 
     status.GetTIndex(&index);
+
+    status.GetNTPoints(&final_index);
+//    final_index -= 1; //?
+    Sparse C;
+
+    if (index == 0){
+        C = invertDiagonal(computeQ(0))/(dt*dt);
+    } else if (index == final_index){
+        C = invertDiagonal(computeQ(index-1))/(dt*dt);
+    } else {
+        Sparse Qi = invertDiagonal(computeQ(index))/(dt*dt);
+        Sparse Qim1 = invertDiagonal(computeQ(index-1))/(dt*dt);
+        Sparse KPiKt = K * invertDiagonal(computeP(index - 1)) * K.transpose();
+        C = Qi + Qim1 + KPiKt;
+    }
+
+    Eigen::BiCGSTAB<Sparse, Eigen::IncompleteLUT<double>> solver;
+    solver.compute(C);
+    u->dlambda = u->dlambda - solver.solve(r->dlambda);
     /* no refinement */
     status.SetRFactor(1);
 
@@ -352,7 +376,6 @@ int MyBraidApp::Clone(braid_Vector u_, braid_Vector *v_ptr_) {
     // delete *v_ptr;
 
     *v_ptr = new BraidVector(u->dlambda);
-    (*v_ptr)->index = u->index;
 
     return 0;
 }
@@ -508,7 +531,7 @@ int main(int argc, char *argv[]) {
     app.ntime = ntime;
     app.mspace = mspace;
     app.dx = dx;
-    app.normcoeff = normcoeff;
+    app.normcoeff = 0.0001;
 
     /* Initialize XBraid */
 
@@ -636,7 +659,9 @@ int main(int argc, char *argv[]) {
                             .eval()
                             .asDiagonal() *
                         (-At.transpose()) * As * m_long.cwiseProduct(m_long) +
-                    D2.transpose() * lambda_long;
+                    D2.transpose() * lambda_long + app.normcoeff * rho_long;
+        
+        
 
         core.Drive();
 
@@ -678,12 +703,12 @@ int main(int argc, char *argv[]) {
             Vector dm_RHS = D2.transpose() * dlambda_long;
             Vector dm_long(dm.size() * dm[0].size());
             for (unsigned long i=0; i < dm.size(); i++) {
-                dm_long(seq(i*DM_LEN_SPACE, (i+1)*DM_LEN_SPACE - 1)) << invertDiagonal(computeP(i)) * dm_RHS(seq(i*DM_LEN_SPACE, (i+1)*DM_LEN_SPACE - 1);
+                dm_long(Eigen::seq(i*DM_LEN_SPACE, (i+1)*DM_LEN_SPACE - 1)) << invertDiagonal(computeP(i)) * dm_RHS(Eigen::seq(i*DM_LEN_SPACE, (i+1)*DM_LEN_SPACE - 1));
             }
             Vector drho_RHS = D1.transpose() * dlambda_long;
             Vector drho_long(drho.size() * drho[0].size());
             for (unsigned long i=0; i < drho.size(); i++) {
-                drho_long(i*DRHO_LEN_SPACE, (i+1)*DRHO_LEN_SPACE - 1) << invertDiagonal(computeQ(i)) * drho_RHS(seq(i*DRHO_LEN_SPACE, (i+1)*DRHO_LEN_SPACE - 1);
+                drho_long(Eigen::seq(i*DRHO_LEN_SPACE, (i+1)*DRHO_LEN_SPACE - 1)) << invertDiagonal(computeQ(i)) * drho_RHS(Eigen::seq(i*DRHO_LEN_SPACE, (i+1)*DRHO_LEN_SPACE - 1);
             }
             double alpha =
                 line_search(dm_long, drho_long, dlambda_long, m_long, rho_long,
