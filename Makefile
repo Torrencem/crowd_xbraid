@@ -134,7 +134,7 @@ run_ex_01_mod: ex-01-mod
 
 clean:
 	rm -f *.out.*
-	rm -f *.o crowd_horesh crowd_horesh_xbraid crowd_horesh_xbraid_dirty_hacks ex-01-mod
+	rm -f *.o crowd_horesh crowd_horesh_xbraid crowd_horesh_xbraid_schur ex-01-mod
 
 fmt: src/*.c src/*.cpp
 	for file in $^ ; do \
