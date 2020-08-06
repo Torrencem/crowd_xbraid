@@ -20,7 +20,7 @@ double objective(double alpha, braid_BaseVector *us_prev, braid_BaseVector *us, 
         _braid_BaseSum(core, app, 1 - alpha, us_prev[i], alpha, us_updated);
         // Level + 1 since we're doing the line search on the coarse grid
         // Compute residual manually as ustop - Phi(ustart)
-        /* _braid_Residual(core, level, i, ustop, r); */
+        /* _braid_Residual(core, level + 1, i, ustop, r); */
         {
            braid_Real       tol      = _braid_CoreElt(core, tol);
            braid_Int        iter     = _braid_CoreElt(core, niter);
@@ -34,7 +34,7 @@ double objective(double alpha, braid_BaseVector *us_prev, braid_BaseVector *us, 
            braid_Int        ii;
 
            ii = i-ilower;
-           _braid_StepStatusInit(ta[ii-1], ta[ii], i-1, tol, iter, level, nrefine, gupper, status);
+           _braid_StepStatusInit(ta[ii-1], ta[ii], i-1, tol, iter, level + 1, nrefine, gupper, status);
 
            // Now compute Phi(us_prev[i])
         
@@ -63,7 +63,7 @@ double line_search(Objective f, braid_BaseVector *us_prev, braid_BaseVector *us,
                    braid_App app, braid_Core status) {
     /* return 0.0; */
     double a = 0.0;
-    double b = 1.0;
+    double b = 3.0;
     double gr = (1.0 + sqrt(5.0)) / 2.0;
     double c = b - (b - a) / gr;
     double d = a + (b - a) / gr;
@@ -105,7 +105,7 @@ int line_search_sync(braid_App app, braid_SyncStatus status) {
         return 0;
     }
 
-    num_vectors = num_total_points / c_factor;
+    num_vectors = num_total_points / c_factor + 1;
     
     // Collect us - the vectors for our process
     _braid_Grid **grids = _braid_StatusElt(status, grids);
@@ -118,7 +118,7 @@ int line_search_sync(braid_App app, braid_SyncStatus status) {
     int safe_message_size =
         (num_vectors / num_procesors + 2) * bvector_size + 2 * sizeof(int);
 
-    int my_num_values = upper_t - lower_t; // Assuming upper_t is not inclusive
+    int my_num_values = upper_t - lower_t + 1; // Assuming upper_t is inclusive
 
     assert(2 * sizeof(int) + my_num_values * bvector_size <= (unsigned long) safe_message_size);
     
@@ -141,12 +141,14 @@ int line_search_sync(braid_App app, braid_SyncStatus status) {
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
     if (rank == 0) {
+        /* printf("I'm the master and I go from %d to %d\n", lower_t, upper_t); */
         // Master process
         // Receive all other vectors
         braid_BaseVector *us_combined = malloc(sizeof(braid_BaseVector) * num_vectors);
         // handle our own us
-        for (int i = lower_t; i < upper_t; i++) {
+        for (int i = lower_t; i <= upper_t; i++) {
             us_combined[lower_t + i] = us[i];
+            /* printf("index: %d\n", i); */
         }
         for (int i = 0; i < num_procesors - 1; i++) {
             // Received message:
@@ -162,6 +164,7 @@ int line_search_sync(braid_App app, braid_SyncStatus status) {
                 // use BufUnpack
                 int index = i + start_index;
                 _braid_BaseBufUnpack(core, app, dmessage + i * bvector_size, us_combined + index, (braid_BufferStatus) core);
+                /* printf("index: %d\n", index); */
             }
             /* free(dmessage); */
         }
@@ -182,7 +185,7 @@ int line_search_sync(braid_App app, braid_SyncStatus status) {
             double alpha =
                 line_search(objective, us_prev, us_combined, num_vectors, level, app, (braid_Core) status);
 
-            alpha = 1.0; // TODO Tmp
+            /* alpha = 1.0; // TODO Tmp */
             
             printf("alpha: %f\n", alpha);
             // ... put result in us_combined
@@ -191,7 +194,7 @@ int line_search_sync(braid_App app, braid_SyncStatus status) {
             }
 
             // As the main process, we need to update our us[i]'s
-            for (int i = lower_t; i < upper_t; i++) {
+            for (int i = lower_t; i <= upper_t; i++) {
                 _braid_BaseClone(core, app, us_combined[i], us + i - lower_t);
             }
         }
@@ -207,6 +210,7 @@ int line_search_sync(braid_App app, braid_SyncStatus status) {
         /* free(us_combined); */
         /* free(us_combined_packed); */
     } else {
+        /* printf("I'm a worker and I go from %d to %d\n", lower_t, upper_t); */
         // Worker process
         // Send u's data to master process
         char *message = malloc(safe_message_size);
@@ -226,18 +230,19 @@ int line_search_sync(braid_App app, braid_SyncStatus status) {
         // Put them back into us
         for (int i = 0; i < my_num_values; i++) {
             /* us[i]->value = updated_us[i + lower_t]; */
-            if (i + lower_t == 2) {
-                printf("My value is: ");
-                printf("%f", us[i]->userVector->value);
-                printf("\n");
-            }
+            int index = i + lower_t;
+            /* if (index == 20 && iter == 1) { */
+            /*     printf("My value is: "); */
+            /*     printf("%f", us[i]->userVector->value); */
+            /*     printf("\n"); */
+            /* } */
             // Use BufUnpack
-            _braid_BaseBufUnpack(core, app, updated_us + i * bvector_size, us + i, (braid_BufferStatus) core);
-            if (i + lower_t == 2) {
-                printf("I got back: ");
-                printf("%f", us[i]->userVector->value);
-                printf("\n");
-            }
+            _braid_BaseBufUnpack(core, app, updated_us + index * bvector_size, us + i, (braid_BufferStatus) core);
+            /* if (index == 20 && iter == 1) { */
+            /*     printf("I got back: "); */
+            /*     printf("%f", us[i]->userVector->value); */
+            /*     printf("\n"); */
+            /* } */
         }
         /* free(updated_us); */
     }
