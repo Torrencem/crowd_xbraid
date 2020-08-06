@@ -41,12 +41,10 @@ double objective(double alpha, braid_BaseVector *us_prev, braid_BaseVector *us, 
            braid_BaseVector phi_u_prev;
            _braid_BaseClone(core, app, us_prev[i], &phi_u_prev);
             
-           // Workaround for a bug in xbraid
-            struct _braid_BaseVector_struct ustop;
-            ustop.userVector = NULL;
-            ustop.bar = NULL;
+            struct _braid_BaseVector_struct *ustop;
+            _braid_BaseClone(core, app, us[i], &ustop);
 
-            _braid_BaseStep(core, app, &ustop, NULL, phi_u_prev, level + 1, status);
+            _braid_BaseStep(core, app, ustop, NULL, phi_u_prev, level + 1, status);
             // r = ustop - \Phi(ustart)
             _braid_BaseSum(core, app, 1.0, us[i], -1.0, phi_u_prev);
             r = phi_u_prev;
@@ -54,9 +52,8 @@ double objective(double alpha, braid_BaseVector *us_prev, braid_BaseVector *us, 
         double norm;
         _braid_BaseSpatialNorm(core, app, r, &norm);
         result += norm;
-        _braid_BaseFree(core, app, us_updated);
+        /* _braid_BaseFree(core, app, us_updated); */
     }
-    _braid_BaseFree(core, app, r);
     return result;
 }
 
@@ -166,7 +163,7 @@ int line_search_sync(braid_App app, braid_SyncStatus status) {
                 int index = i + start_index;
                 _braid_BaseBufUnpack(core, app, dmessage + i * bvector_size, us_combined + index, (braid_BufferStatus) core);
             }
-            free(dmessage);
+            /* free(dmessage); */
         }
         // Perform the line search
         if (iter != 0) {
@@ -180,10 +177,12 @@ int line_search_sync(braid_App app, braid_SyncStatus status) {
                 _braid_BaseBufUnpack(core, app, us_prev_message + i * bvector_size, us_prev + i, (braid_BufferStatus) core);
             }
 
-            free(us_prev_message);
+            /* free(us_prev_message); */
 
             double alpha =
                 line_search(objective, us_prev, us_combined, num_vectors, level, app, (braid_Core) status);
+
+            alpha = 1.0; // TODO Tmp
             
             printf("alpha: %f\n", alpha);
             // ... put result in us_combined
@@ -205,8 +204,8 @@ int line_search_sync(braid_App app, braid_SyncStatus status) {
         MPI_Isend(us_combined_packed, num_vectors * bvector_size, MPI_BYTE, 0, TAG_US_PREV, MPI_COMM_WORLD, &request);
         // Send updated us_combined to workers
         MPI_Bcast(us_combined_packed, num_vectors * bvector_size, MPI_BYTE, 0, MPI_COMM_WORLD);
-        free(us_combined);
-        free(us_combined_packed);
+        /* free(us_combined); */
+        /* free(us_combined_packed); */
     } else {
         // Worker process
         // Send u's data to master process
@@ -220,20 +219,30 @@ int line_search_sync(braid_App app, braid_SyncStatus status) {
             _braid_BaseBufPack(core, app, us[i], dmessage + i * bvector_size, (braid_BufferStatus) core);
         }
         MPI_Send(message, safe_message_size, MPI_BYTE, 0, TAG_DATA_TO_MASTER, MPI_COMM_WORLD);
-        free(message);
+        /* free(message); */
         // Receive updated us values
         char *updated_us = malloc(num_vectors * bvector_size);
-        MPI_Bcast(updated_us, num_vectors, MPI_BYTE, 0, MPI_COMM_WORLD);
+        MPI_Bcast(updated_us, num_vectors * bvector_size, MPI_BYTE, 0, MPI_COMM_WORLD);
         // Put them back into us
         for (int i = 0; i < my_num_values; i++) {
             /* us[i]->value = updated_us[i + lower_t]; */
+            if (i + lower_t == 2) {
+                printf("My value is: ");
+                printf("%f", us[i]->userVector->value);
+                printf("\n");
+            }
             // Use BufUnpack
             _braid_BaseBufUnpack(core, app, updated_us + i * bvector_size, us + i, (braid_BufferStatus) core);
+            if (i + lower_t == 2) {
+                printf("I got back: ");
+                printf("%f", us[i]->userVector->value);
+                printf("\n");
+            }
         }
-        free(updated_us);
+        /* free(updated_us); */
     }
 
-    free(us);
+    /* free(us); */
 
     return 0;
 }

@@ -63,7 +63,6 @@
 #include <assert.h>
 
 #include "braid.h"
-#include "line_search.c"
 
 /*--------------------------------------------------------------------------
  * User-defined routines and structures
@@ -79,6 +78,8 @@ typedef struct _braid_App_struct {
 typedef struct _braid_Vector_struct {
     double value;
 } my_Vector;
+
+#include "line_search.c"
 
 int my_Step(braid_App app, braid_Vector ustop, braid_Vector fstop,
             braid_Vector u, braid_StepStatus status) {
