@@ -67,13 +67,13 @@ end
 
 iters = 5;
 for i=1:iters
-    normcoeff = 0.0001*2^(-i);
+    normcoeff = 0.001*2^(-i);
     recalc_matrices(m, rho, normcoeff);
     sizeD = size(D);
-    b = D*inv(A_hat)*get_GwL(m, rho, lambda) - get_GlambdaL(m, rho);
+    b = D*inv(A_hat)*get_GwL(m, rho, lambda, normcoeff) - get_GlambdaL(m, rho);
     
     dlambda = S\b;
-    dw = -inv(A_hat)*(D'*dlambda+get_GwL(m, rho, lambda));
+    dw = -inv(A_hat)*(D'*dlambda+get_GwL(m, rho, lambda, normcoeff));
     dm = dw(1 : (space_steps + 1) * time_steps);
     drho = dw((space_steps + 1) * time_steps + 1 : (space_steps + 1) * time_steps + space_steps * (time_steps + 1));
 
@@ -104,9 +104,9 @@ end
 function recalc_matrices(m, rho, normcoeff)
     global A_hat
     global S
-    global D
-    dim_D = size(D);
-    A_hat = get_A_hat(m, rho);
+%     global D
+%     dim_D = size(D);
+    A_hat = get_A_hat(m, rho, normcoeff);
 %     S = -(D / A_hat) * D';
     S = get_S(m, rho, normcoeff);
 end
@@ -133,7 +133,6 @@ function Pi = P(i, rho)
     global X
     global space_steps
     Pi = 2 * diag(X*(1./(rho(i*space_steps+1:(i+1)*space_steps)) + 1./(rho((i+1)*space_steps+1:(i+2)*space_steps))));
-    Pi = Pi;
 end
 
 function Qi = Q(i, m, rho, normcoeff)
@@ -215,17 +214,16 @@ function At = get_At()
     end
 end
 
-function A = get_A_hat(m, rho)
+function A = get_A_hat(m, rho, normcoeff)
     global As
     global At
     vec_1 = 2 * As' * At * (1./rho);
     vec_2 = 2 * At' * As * (m.^2);
     vec_3 = 1./(rho.^3);
-    A = blkdiag(diag(vec_1), diag(vec_2) * diag(vec_3));
-    A = A + 0.00001 * eye(size(A));
+    A = blkdiag(diag(vec_1), diag(vec_2) * diag(vec_3) + normcoeff * eye(length(vec_2)));
 end
 
-function GwL = get_GwL(m, rho, lambda)
+function GwL = get_GwL(m, rho, lambda, normcoeff)
     global As
     global At
     global D1
@@ -233,7 +231,7 @@ function GwL = get_GwL(m, rho, lambda)
     global Gm
     global Grho
     GmL = 2 * diag(m) * As' * At * (1./rho) + D1' * lambda;
-    GrhoL = -diag(1./(rho.^2)) * At' * As * (m.^2) + D2' * lambda;
+    GrhoL = -diag(1./(rho.^2)) * At' * As * (m.^2) + D2' * lambda + 2*normcoeff*rho;
     Gm = GmL;
     Grho = GrhoL;
     GwL = [GmL; GrhoL];
@@ -255,7 +253,7 @@ function reward = reward(x, dm, drho, dlambda, normcoeff)
     newrho = rho + x * drho;
     newlambda = lambda + x * dlambda;
     recalc_matrices(newm, newrho, normcoeff)
-    b = -[get_GwL(newm, newrho, newlambda); get_GlambdaL(newm, newrho)];
+    b = -[get_GwL(newm, newrho, newlambda, normcoeff); get_GlambdaL(newm, newrho)];
     reward = norm(b);
 end
 
