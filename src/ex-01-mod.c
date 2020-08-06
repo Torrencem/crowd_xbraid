@@ -191,7 +191,7 @@ int main(int argc, char *argv[]) {
     int ntime, rank;
 
     /* Define time domain: ntime intervals */
-    ntime = 10;
+    ntime = 60;
     tstart = 0.0;
     tstop = tstart + ntime / 2.;
 
