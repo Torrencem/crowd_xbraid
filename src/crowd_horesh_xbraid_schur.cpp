@@ -255,7 +255,6 @@ int MyBraidApp::TriResidual(braid_Vector uleft_, braid_Vector uright_,
     status.GetTIndex(&index);
     status.GetNTPoints(&final_index);
 //    final_index -= 1; //?
-
     status.GetTriT(&t, &tprev, &tnext);
 
     /* Get the time-step size */
@@ -280,7 +279,8 @@ int MyBraidApp::TriResidual(braid_Vector uleft_, braid_Vector uright_,
 
     Vector RHS = get_RHS(index);
     
-    r->dlambda = r->dlambda - RHS - f->dlambda;
+    r->dlambda = r->dlambda - RHS;
+    if (f != nullptr) r->dlambda = r->dlambda - f->dlambda;
 
     return 0;
 }
@@ -489,11 +489,11 @@ int main(int argc, char *argv[]) {
 
     /* Define space domain. Space domain is between 0 and 1, mspace defines the
      * number of steps */
-    mspace = 4;
-    ntime = 4;
+    mspace = 16;
+    ntime = 16;
 
     /* Define some Braid parameters */
-    max_levels = 1;
+    max_levels = 2;
     min_coarse = 1;
     nrelax = 10;
     nrelaxc = 10;
@@ -613,22 +613,22 @@ int main(int argc, char *argv[]) {
     }
 
     for (int i_ = 0; i_ < iters; i_++) {
-        Vector rho_long((app.rho.size() - 1) * app.rho[1].size());
-        for (unsigned long i = 1; i < app.rho.size(); i++) {
-            for (int j = 0; j < app.rho[1].size(); j++) {
-                rho_long[(i - 1) * app.rho[1].size() + j] = app.rho[i][j];
+        Vector rho_long(DRHO_LEN_SPACE * DRHO_LEN_TIME);
+        for (int i = 0; i < DRHO_LEN_TIME; i++) {
+            for (int j = 0; j < DRHO_LEN_SPACE; j++) {
+                rho_long[i * DRHO_LEN_SPACE + j] = app.rho[i][j];
             }
         }
-        Vector m_long((app.m.size() - 1) * app.m[1].size());
-        for (unsigned long i = 1; i < app.m.size(); i++) {
-            for (int j = 0; j < app.m[1].size(); j++) {
-                m_long[(i - 1) * app.m[1].size() + j] = app.m[i][j];
+        Vector m_long(DM_LEN_SPACE * DM_LEN_TIME);
+        for (int i = 0; i < DM_LEN_TIME; i++) {
+            for (int j = 0; j < DM_LEN_SPACE; j++) {
+                m_long[i * DM_LEN_SPACE + j] = app.m[i][j];
             }
         }
-        Vector lambda_long(app.lambda.size() * app.lambda[0].size());
-        for (unsigned long i = 0; i < app.lambda.size(); i++) {
-            for (int j = 0; j < app.lambda[0].size(); j++) {
-                lambda_long[i * app.lambda[0].size() + j] = app.lambda[i][j];
+        Vector lambda_long(DLAMBDA_LEN_SPACE * DLAMBDA_LEN_TIME);
+        for (int i = 0; i < DLAMBDA_LEN_TIME; i++) {
+            for (int j = 0; j < DLAMBDA_LEN_SPACE; j++) {
+                lambda_long[i * DLAMBDA_LEN_SPACE + j] = app.lambda[i][j];
             }
         }
 
@@ -712,10 +712,10 @@ int main(int argc, char *argv[]) {
             printf("Line search completed for iteration %d. alpha = %f\n", i_,
                    alpha);
 
-            for (unsigned long i = 1; i < app.m.size(); i++) {
+            for (unsigned long i = 0; i < app.m.size(); i++) {
                 app.m[i] += alpha * dm_long(Eigen::seq(i*DM_LEN_SPACE, (i+1)*DM_LEN_SPACE - 1));
             }
-            for (unsigned long i = 1; i < app.rho.size(); i++) {
+            for (unsigned long i = 0; i < app.rho.size(); i++) {
                 app.rho[i] += alpha * drho_long(Eigen::seq(i*DRHO_LEN_SPACE, (i+1)*DRHO_LEN_SPACE - 1));
             }
             for (unsigned long i = 0; i < app.lambda.size(); i++) {
@@ -723,9 +723,9 @@ int main(int argc, char *argv[]) {
             }
             // Send global picture of m, rho, and lambda
             int message_length =
-                sizeof(double) * (app.m.size() * app.m[0].size() +
-                                  app.rho.size() * app.rho[0].size() +
-                                  app.lambda.size() * app.lambda[0].size());
+                sizeof(double) * (DM_LEN_SPACE * DM_LEN_TIME +
+                                  DRHO_LEN_SPACE * DRHO_LEN_TIME +
+                                  DLAMBDA_LEN_SPACE * DLAMBDA_LEN_TIME);
             double *buffer = (double *)malloc(message_length * sizeof(double));
             double *buffer_ptr = buffer;
             for (Vector &m : app.m) {
@@ -750,9 +750,9 @@ int main(int argc, char *argv[]) {
             // access should have already sent their results to the main
             // processor Receive a global picture of m, rho, and lambda
             int message_length =
-                sizeof(double) * (app.m.size() * app.m[0].size() +
-                                  app.rho.size() * app.rho[0].size() +
-                                  app.lambda.size() * app.lambda[0].size());
+                sizeof(double) * (DM_LEN_SPACE * DM_LEN_TIME +
+                                  DRHO_LEN_SPACE * DRHO_LEN_TIME +
+                                  DLAMBDA_LEN_SPACE * DLAMBDA_LEN_TIME);
             double *buffer = (double *)malloc(message_length * sizeof(double));
             MPI_Bcast(buffer, message_length, MPI_DOUBLE, 0, MPI_COMM_WORLD);
             double *buffer_ptr = buffer;
@@ -776,6 +776,9 @@ int main(int argc, char *argv[]) {
         app.normcoeff /= 2;
     }
 
+    for (unsigned long i = 0; i < app.rho.size(); i++) {
+        std::cout << app.rho[i] << "\n" << std::endl;
+    }
     // TODO:
     // rank == 0 should print some results
 
