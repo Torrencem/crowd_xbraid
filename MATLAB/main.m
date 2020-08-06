@@ -21,8 +21,8 @@ global S
 global K
 global X
 
-space_steps = 24;
-time_steps = 24;
+space_steps = 40;
+time_steps = 40;
 show = @(x) surf(reshape(x, [space_steps, time_steps+1]));
 showm = @(x) surf(reshape(x, [space_steps+1, time_steps]));
 showl = @(x) surf(reshape(x, [space_steps, time_steps+2]));
@@ -65,13 +65,13 @@ if abs(sum(q(1:space_steps)) + sum(q(space_steps * (time_steps + 1) + 1: space_s
     disp("Conservation of mass is false.  This is not a problem, but might lead to seemingly strange behaviour.");
 end
 
-iters = 5;
+iters = 10;
 for i=1:iters
     normcoeff = 0.001*2^(-i);
     recalc_matrices(m, rho, normcoeff);
     sizeD = size(D);
     b = D*inv(A_hat)*get_GwL(m, rho, lambda, normcoeff) - get_GlambdaL(m, rho);
-    
+    disp(norm(b));
     dlambda = S\b;
     dw = -inv(A_hat)*(D'*dlambda+get_GwL(m, rho, lambda, normcoeff));
     dm = dw(1 : (space_steps + 1) * time_steps);
@@ -132,7 +132,9 @@ end
 function Pi = P(i, rho)
     global X
     global space_steps
-    Pi = 2 * diag(X*(1./(rho(i*space_steps+1:(i+1)*space_steps)) + 1./(rho((i+1)*space_steps+1:(i+2)*space_steps))));
+    
+    Pi = 2 * spdiags(X*(1./(rho(i*space_steps+1:(i+1)*space_steps)) + 1./(rho((i+1)*space_steps+1:(i+2)*space_steps))),0,space_steps+1,space_steps+1);
+ 
 end
 
 function Qi = Q(i, m, rho, normcoeff)
@@ -140,11 +142,11 @@ function Qi = Q(i, m, rho, normcoeff)
     global space_steps
     global time_steps
     if i == 0
-        Qi = 2 * diag(X'*(m(i*(space_steps+1)+1:(i+1)*(space_steps+1)).^2)) * diag(rho(i*space_steps+1:(i+1)*space_steps));
+        Qi = 2 * spdiags(X'*(m(i*(space_steps+1)+1:(i+1)*(space_steps+1)).^2),0,space_steps,space_steps) * spdiags(rho(i*space_steps+1:(i+1)*space_steps),0,space_steps,space_steps);
     elseif i == time_steps
-        Qi = 2 * diag(X'*(m((i-1)*(space_steps+1)+1:i*(space_steps+1)).^2)) * diag(rho(i*space_steps+1:(i+1)*space_steps));
+        Qi = 2 * spdiags(X'*(m((i-1)*(space_steps+1)+1:i*(space_steps+1)).^2),0,space_steps,space_steps) * spdiags(rho(i*space_steps+1:(i+1)*space_steps),0,space_steps,space_steps);
     else
-        Qi = 2 * diag(X'*(m(i*(space_steps+1)+1:(i+1)*(space_steps+1)).^2+m((i-1)*(space_steps+1)+1:i*(space_steps+1)).^2)) * diag(rho(i*space_steps+1:(i+1)*space_steps));
+        Qi = 2 * spdiags(X'*(m(i*(space_steps+1)+1:(i+1)*(space_steps+1)).^2+m((i-1)*(space_steps+1)+1:i*(space_steps+1)).^2),0,space_steps,space_steps) * spdiags(rho(i*space_steps+1:(i+1)*space_steps),0,space_steps,space_steps);
     end
     Qi = Qi + normcoeff*eye(size(Qi));
 end
@@ -220,7 +222,7 @@ function A = get_A_hat(m, rho, normcoeff)
     vec_1 = 2 * As' * At * (1./rho);
     vec_2 = 2 * At' * As * (m.^2);
     vec_3 = 1./(rho.^3);
-    A = blkdiag(diag(vec_1), diag(vec_2) * diag(vec_3) + normcoeff * eye(length(vec_2)));
+    A = blkdiag(spdiags(vec_1,0,length(vec_1),length(vec_1)), spdiags(vec_2,0,length(vec_2),length(vec_2)) * spdiags(vec_3,0,length(vec_3),length(vec_3)) + normcoeff * eye(length(vec_2)));
 end
 
 function GwL = get_GwL(m, rho, lambda, normcoeff)
@@ -230,8 +232,8 @@ function GwL = get_GwL(m, rho, lambda, normcoeff)
     global D2
     global Gm
     global Grho
-    GmL = 2 * diag(m) * As' * At * (1./rho) + D1' * lambda;
-    GrhoL = -diag(1./(rho.^2)) * At' * As * (m.^2) + D2' * lambda + 2*normcoeff*rho;
+    GmL = 2 * spdiags(m,0,length(m),length(m)) * As' * At * (1./rho) + D1' * lambda;
+    GrhoL = -spdiags(1./(rho.^2),0,length(rho),length(rho)) * At' * As * (m.^2) + D2' * lambda + 2*normcoeff*rho;
     Gm = GmL;
     Grho = GrhoL;
     GwL = [GmL; GrhoL];
@@ -252,7 +254,7 @@ function reward = reward(x, dm, drho, dlambda, normcoeff)
     newm = m + x * dm;
     newrho = rho + x * drho;
     newlambda = lambda + x * dlambda;
-    recalc_matrices(newm, newrho, normcoeff)
+    %recalc_matrices(newm, newrho, normcoeff)
     b = -[get_GwL(newm, newrho, newlambda, normcoeff); get_GlambdaL(newm, newrho)];
     reward = norm(b);
 end
