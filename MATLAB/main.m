@@ -21,8 +21,8 @@ global S
 global K
 global X
 
-space_steps = 40;
-time_steps = 40;
+space_steps = 80;
+time_steps = 80;
 show = @(x) surf(reshape(x, [space_steps, time_steps+1]));
 showm = @(x) surf(reshape(x, [space_steps+1, time_steps]));
 showl = @(x) surf(reshape(x, [space_steps, time_steps+2]));
@@ -67,11 +67,11 @@ end
 
 iters = 10;
 for i=1:iters
-    normcoeff = 0.001*2^(-i);
+    normcoeff = 0.001*2^(-3*i);
     recalc_matrices(m, rho, normcoeff);
     sizeD = size(D);
     b = D*inv(A_hat)*get_GwL(m, rho, lambda, normcoeff) - get_GlambdaL(m, rho);
-    disp(norm(b));
+    disp(norm(b)/(space_steps*time_steps));
     dlambda = S\b;
     dw = -inv(A_hat)*(D'*dlambda+get_GwL(m, rho, lambda, normcoeff));
     dm = dw(1 : (space_steps + 1) * time_steps);
@@ -116,7 +116,7 @@ function S = get_S(m, rho, normcoeff)
     global space_steps
     global time_steps
     global d_time
-    S = zeros(space_steps*(time_steps+2));
+    S = sparse(1,1,0,space_steps*(time_steps+2),space_steps*(time_steps+2));
     S(1:space_steps, 1:space_steps) = inv(Q(0, m, rho, normcoeff))/d_time^2;
     S(1:space_steps, space_steps+1:2*space_steps) = -inv(Q(0, m, rho, normcoeff))/d_time^2;
     for i=1:time_steps
