@@ -7,7 +7,7 @@ Then use ``make`` to build the example code you want to run (use ``make list`` t
 
 Please report any problems you have getting things to work.
 
-If the clone or build fails because of weirdness with the submodule (very annoying), do ``cd xbraid`` and ``git checkout trimgrit_cxx``.
+If the clone or build fails because of weirdness with the submodule (very annoying), do ``cd xbraid`` and ``git checkout ipam_2020``.
 
 Before committing code changes, please run:
 
