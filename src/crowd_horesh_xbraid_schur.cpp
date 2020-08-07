@@ -179,7 +179,7 @@ MyBraidApp::MyBraidApp(MPI_Comm comm_t_, int rank_, double tstart_,
                        double tstop_, int ntime_)
     : TriBraidApp(comm_t_, tstart_, tstop_, ntime_) {}
 
-/*------------------------------------*/
+//------------------------------------
 
 /*--------------------------------------------------------------------------
  * TriMGRIT wrapper routines
@@ -228,7 +228,7 @@ const Sparse MyBraidApp::computeQ(int index) {
     return Sparse(Qi__) + normcoeff * normalizer;
 }
 
-/* Compute r = A(r) - f */
+// Compute r = A(r) - f
 
 int MyBraidApp::TriResidual(braid_Vector uleft_, braid_Vector uright_,
                             braid_Vector f_, braid_Vector r_,
@@ -284,9 +284,9 @@ int MyBraidApp::TriResidual(braid_Vector uleft_, braid_Vector uright_,
     return 0;
 }
 
-/*------------------------------------*/
+//------------------------------------
 
-/* Solve A(u) = f */
+// Solve A(u) = f
 
 int MyBraidApp::TriSolve(braid_Vector uleft_, braid_Vector uright_,
                          braid_Vector fleft_, braid_Vector fright_,
@@ -341,9 +341,9 @@ int MyBraidApp::TriSolve(braid_Vector uleft_, braid_Vector uright_,
     return 0;
 }
 
-/*------------------------------------*/
+//------------------------------------
 
-/* This is only called from level 0 */
+// This is only called from level 0
 
 int MyBraidApp::Init(double t, braid_Vector *u_ptr_) {
     BraidVector **u_ptr = (BraidVector **)u_ptr_;
@@ -357,7 +357,7 @@ int MyBraidApp::Init(double t, braid_Vector *u_ptr_) {
     return 0;
 }
 
-/*------------------------------------*/
+//------------------------------------
 
 int MyBraidApp::Clone(braid_Vector u_, braid_Vector *v_ptr_) {
     BraidVector *u = (BraidVector *)u_;
@@ -371,7 +371,7 @@ int MyBraidApp::Clone(braid_Vector u_, braid_Vector *v_ptr_) {
     return 0;
 }
 
-/*------------------------------------*/
+//------------------------------------
 
 int MyBraidApp::Free(braid_Vector u_) {
     BraidVector *u = (BraidVector *)u_;
@@ -380,7 +380,7 @@ int MyBraidApp::Free(braid_Vector u_) {
     return 0;
 }
 
-/*------------------------------------*/
+//------------------------------------
 
 int MyBraidApp::Sum(double alpha, braid_Vector x_, double beta,
                     braid_Vector y_) {
@@ -392,7 +392,7 @@ int MyBraidApp::Sum(double alpha, braid_Vector x_, double beta,
     return 0;
 }
 
-/*------------------------------------*/
+//------------------------------------
 
 int MyBraidApp::SpatialNorm(braid_Vector u_, double *norm_ptr) {
     BraidVector *u = (BraidVector *)u_;
@@ -402,7 +402,7 @@ int MyBraidApp::SpatialNorm(braid_Vector u_, double *norm_ptr) {
     return 0;
 }
 
-/*------------------------------------*/
+//------------------------------------
 
 int MyBraidApp::Access(braid_Vector u_, BraidAccessStatus &astatus) {
     BraidVector *u = (BraidVector *)u_;
@@ -431,7 +431,7 @@ int MyBraidApp::Access(braid_Vector u_, BraidAccessStatus &astatus) {
     return 0;
 }
 
-/*------------------------------------*/
+//------------------------------------
 
 int MyBraidApp::BufSize(int *size_ptr, BraidBufferStatus &bstatus) {
     *size_ptr = sizeof(int) + DLAMBDA_LEN_SPACE * sizeof(double);
@@ -439,7 +439,7 @@ int MyBraidApp::BufSize(int *size_ptr, BraidBufferStatus &bstatus) {
     return 0;
 }
 
-/*------------------------------------*/
+//------------------------------------
 
 int MyBraidApp::BufPack(braid_Vector u_, void *buffer_,
                         BraidBufferStatus &bstatus) {
@@ -457,7 +457,7 @@ int MyBraidApp::BufPack(braid_Vector u_, void *buffer_,
     return 0;
 }
 
-/*------------------------------------*/
+//------------------------------------
 
 int MyBraidApp::BufUnpack(void *buffer_, braid_Vector *u_ptr_,
                           BraidBufferStatus &bstatus) {
@@ -488,33 +488,33 @@ int main(int argc, char *argv[]) {
     double tol;
     double time;
 
-    /* Initialize MPI */
+    // Initialize MPI
     MPI_Init(&argc, &argv);
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
-    /* Define space domain. Space domain is between 0 and 1, mspace defines the
-     * number of steps */
+    // Define space domain. Space domain is between 0 and 1, mspace defines the
+    // number of steps.
     mspace = 16;
     ntime = 16;
 
-    /* Define some Braid parameters */
+    // Define some Braid parameters
     max_levels = 4;
     min_coarse = 1;
     nrelax = 25;
     nrelaxc = 25;
-    maxiter = 500;
+    maxiter = 50;
     tol = 1.0e-6;
     access_level = 1;
     print_level = 2;
 
-    /* Define the space step */
+    // Define the space step
     dx = (double)1 / (mspace + 1);
 
-    /* Define time domain and step */
-    tstart = 0.0; /* Beginning of time domain */
-    tstop = 1.0;  /* End of time domain*/
+    // Define time domain and step
+    tstart = 0.0; // Beginning of time domain
+    tstop = 1.0;  // End of time domain
 
-    /* Set up the app structure */
+    // Set up the app structure
     // Since we're calculating dlambda, we use ntime + 1 time points.
     auto app = MyBraidApp(MPI_COMM_WORLD, rank, tstart, tstop, ntime + 1);
     app.myid = rank;
@@ -526,16 +526,16 @@ int main(int argc, char *argv[]) {
                             // Q_i is invertible.  This will approach zero as
                             // the algorithm iterates.
 
-    /* Initialize XBraid */
+    // Initialize XBraid
 
     auto core = BraidTriCore(MPI_COMM_WORLD, &app);
 
-    /* Set some XBraid(_Adjoint) parameters */
+    // Set some XBraid(_Adjoint) parameters
     core.SetMaxLevels(max_levels);
     core.SetMinCoarse(min_coarse);
     core.SetNRelax(-1, nrelax);
     if (max_levels > 1) {
-        core.SetNRelax(max_levels - 1, nrelaxc); /* nrelax on coarsest level */
+        core.SetNRelax(max_levels - 1, nrelaxc); // nrelax on coarsest level
     }
     core.SetCFactor(-1, app.cfactor);
     core.SetAccessLevel(access_level);
@@ -548,8 +548,8 @@ int main(int argc, char *argv[]) {
 
     double d_time = time / ntime;
 
-    /* Set up initial values for m, rho, and lambda.  (TriMGRIT won't see these:
-     * it calculates dm, drho, and dlambda.) */
+    // Set up initial values for m, rho, and lambda.  (TriMGRIT won't see these:
+    // it calculates dm, drho, and dlambda.)
     app.m = std::vector<Vector>();
     for (int i = 0; i < DM_LEN_TIME; i++) {
         Vector m_val(DM_LEN_SPACE);
@@ -571,7 +571,7 @@ int main(int argc, char *argv[]) {
         app.lambda.push_back(lambda_val);
     }
 
-    /* Set up initial and final values for rho. */
+    // Set up initial and final values for rho.
     app.q = std::vector<Vector>(Q_LEN_TIME);
 
     double accumulator = 0.0;
@@ -602,7 +602,7 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    /* Various constant matrices used in the discretization. */
+    // Various constant matrices used in the discretization.
     app.K = Sparse(mspace, mspace + 1);
     app.X = Sparse(mspace + 1, mspace);
 
@@ -622,10 +622,10 @@ int main(int argc, char *argv[]) {
         app.X.insert(i + 1, i) = 0.25;
     }
 
-    /* Iterative TriMGRIT SQP */
+    // Iterative TriMGRIT SQP
     for (int i_ = 0; i_ < iters; i_++) {
 
-        /* Full Eigen vectors for rho, m, and lambda. */
+        // Full Eigen vectors for rho, m, and lambda.
         Vector rho_long(DRHO_LEN_SPACE * DRHO_LEN_TIME);
         for (int i = 0; i < DRHO_LEN_TIME; i++) {
             for (int j = 0; j < DRHO_LEN_SPACE; j++) {
@@ -645,8 +645,8 @@ int main(int argc, char *argv[]) {
             }
         }
 
-        /* Compute various gradients, culminating in the right-hand side of the
-         * equation we wish to solve. */
+        // Compute various gradients, culminating in the right-hand side of the
+        // equation we wish to solve.
         app.GlambdaL = get_GlambdaL(m_long, rho_long, q_long, D);
         Vector GmL1 = 2.0 * m_long.asDiagonal() * As.transpose() * At *
                       rho_long.cwiseInverse();
@@ -677,12 +677,12 @@ int main(int argc, char *argv[]) {
         }
         app.RHS = -(D1 * RHS_m + D2 * RHS_rho - app.GlambdaL);
 
-        /* At last, run the parallel-in-time TriMGRIT simulation */
+        // At last, run the parallel-in-time TriMGRIT simulation
         core.Drive();
 
-        /* Collect resultant vectors for dlambda from the cores across which the
-         * simulation was distributed, compute line search, and push results
-         * back to parallel cores. */
+        // Collect resultant vectors for dlambda from the cores across which the
+        // simulation was distributed, compute line search, and push results
+        // back to parallel cores.
         if (rank == 0) {
             // Main processor
             // Receive from access the results of workers' computation
@@ -781,9 +781,9 @@ int main(int argc, char *argv[]) {
             MPI_Bcast(buffer, message_length, MPI_DOUBLE, 0, MPI_COMM_WORLD);
             free(buffer);
         } else {
-            // Worker
-            // access should have already sent their results to the main
-            // processor Receive a global picture of m, rho, and lambda
+            // Worker access should have already sent their results to the
+            // main processor
+            // Receive a global picture of m, rho, and lambda
             int message_length =
                 sizeof(double) *
                 (DM_LEN_SPACE * DM_LEN_TIME + DRHO_LEN_SPACE * DRHO_LEN_TIME +
@@ -809,7 +809,7 @@ int main(int argc, char *argv[]) {
             free(buffer);
         }
 
-        /* Decrease the normalization coefficient by a factor of 2. */
+        // Decrease the normalization coefficient by a factor of 2.
         app.normcoeff /= 2;
     }
 
@@ -817,7 +817,7 @@ int main(int argc, char *argv[]) {
         std::cout << app.rho[i] << "\n" << std::endl;
     }
 
-    /* Print runtime to file (for runtime comparisons)*/
+    // Print runtime to file (for runtime comparisons)
     // time = (double)(end - start) / CLOCKS_PER_SEC;
     // printf("Total Run Time: %f s \n", time);
 
