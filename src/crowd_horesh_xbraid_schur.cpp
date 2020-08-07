@@ -35,7 +35,6 @@
 
 #include "braid_test.h"
 #include "tribraid.hpp"
-#define PI 3.14159265
 #define TAG_WORKER_RESULT 42
 
 #define DM_LEN_SPACE (mspace + 1)
@@ -48,16 +47,14 @@
 #define DLAMBDA_LEN_TIME (ntime + 2)
 #define Q_LEN_TIME (ntime + 2)
 
+// In MATLAB, this would be diag(1./diag(a))
 Sparse invertDiagonal(const Sparse &a) {
-    // assert(a.rows() == a.cols());
     Sparse m2(a.rows(), a.cols());
-
     for (int i = 0; i < a.rows(); i++) {
-        if (a.coeff(i, i) != 0){
+        if (a.coeff(i, i) != 0) {
             m2.insert(i, i) = 1.0 / a.coeff(i, i);
         }
     }
-
     return m2;
 }
 
@@ -69,8 +66,7 @@ class BraidVector {
   public:
     Vector dlambda;
 
-    BraidVector(Vector dlambda_)
-        : dlambda(dlambda_) {}
+    BraidVector(Vector dlambda_) : dlambda(dlambda_) {}
 
     BraidVector(int mspace) {
         this->dlambda = Vector(DLAMBDA_LEN_SPACE);
@@ -84,10 +80,9 @@ class MyBraidApp : public TriBraidApp {
   protected:
     // BraidApp defines tstart, tstop, ntime and comm_t
   public:
-    int ntime, mspace, ilower, iupper, npoints, myid;
+    int ntime, mspace, ilower, iupper, npoints, myid, cfactor;
     double dx;
     double normcoeff;
-    FILE *ufile, *vfile, *wfile;
     std::vector<Vector> m, rho, lambda, q;
     Sparse K, X;
     Vector GlambdaL, GmL, GrhoL, RHS;
@@ -130,7 +125,6 @@ class MyBraidApp : public TriBraidApp {
 
     virtual int BufUnpack(void *buffer, braid_Vector *u_ptr,
                           BraidBufferStatus &bstatus) override;
-    
 
     const Sparse computeP(const int index);
     const Sparse computeQ(const int index);
@@ -153,7 +147,8 @@ class MyBraidApp : public TriBraidApp {
 };
 
 const Vector MyBraidApp::get_RHS(int index) {
-    return RHS(Eigen::seq(index*DLAMBDA_LEN_SPACE, (index+1)*DLAMBDA_LEN_SPACE - 1));
+    return RHS(Eigen::seq(index * DLAMBDA_LEN_SPACE,
+                          (index + 1) * DLAMBDA_LEN_SPACE - 1));
 }
 
 const Vector MyBraidApp::compute_GwMi(int index) {
@@ -190,7 +185,9 @@ MyBraidApp::MyBraidApp(MPI_Comm comm_t_, int rank_, double tstart_,
  * TriMGRIT wrapper routines
  *--------------------------------------------------------------------------*/
 
-const Sparse MyBraidApp::computeP(int index){
+// Compute the matrix P_i, which forms one chunk of the top left quadrant of
+// \hat{A}.
+const Sparse MyBraidApp::computeP(int index) {
     assert(index < DRHO_LEN_TIME);
     Vector tmp1 = rho[index].cwiseInverse() + rho[index + 1].cwiseInverse();
     Vector tmp1_ = X * tmp1;
@@ -198,7 +195,9 @@ const Sparse MyBraidApp::computeP(int index){
     return Sparse(Pi_);
 }
 
-const Sparse MyBraidApp::computeQ(int index){
+// Compute the matrix Q_i, which forms one chunk of the bottom right quadrant of
+// \hat{A}.
+const Sparse MyBraidApp::computeQ(int index) {
 
     Vector mi(DM_LEN_SPACE);
 
@@ -216,7 +215,6 @@ const Sparse MyBraidApp::computeQ(int index){
         mim1 = m[index - 1];
     }
 
-    assert(mi.cwiseProduct(mi).size() == mim1.cwiseProduct(mim1).size());
     Vector tmp2 = mi.cwiseProduct(mi) + mim1.cwiseProduct(mim1);
     Vector rhoi = rho[index];
     Vector tmp3 = rhoi.cwiseProduct(rhoi.cwiseProduct(rhoi)).cwiseInverse();
@@ -244,10 +242,11 @@ int MyBraidApp::TriResidual(braid_Vector uleft_, braid_Vector uright_,
 
     int index, final_index;
 
+    // Get the time-step size and the ``true" index of the vector in question,
+    // compensating for coarsening.
     status.GetTIndex(&index);
     status.GetNTPoints(&final_index);
     status.GetTriT(&t, &tprev, &tnext);
-    /* Get the time-step size */
     if (t < tnext) {
         dt = tnext - t;
     } else {
@@ -255,27 +254,32 @@ int MyBraidApp::TriResidual(braid_Vector uleft_, braid_Vector uright_,
     }
     int level;
     status.GetLevel(&level);
-    int factor = pow(2, level);
+    int factor = pow(cfactor, level);
     index = index * factor;
-    dt = factor/(factor/dt - 1);
+    dt = factor / (factor / dt -
+                   1); // Since we are calculating dlambda, we have one more
+                       // TriMGRIT time points than we do real time points.
 
-    if (uleft == nullptr){
-        Sparse Q0 = invertDiagonal(computeQ(0))/(dt*dt);
-        r->dlambda = Q0*r->dlambda - Q0*uright->dlambda;
-    } else if (uright == nullptr){
-        Sparse Qn = invertDiagonal(computeQ(index-factor))/(dt*dt);
-        r->dlambda = -Qn*uleft->dlambda + Qn*r->dlambda;
+    if (uleft == nullptr) {
+        Sparse Q0 = invertDiagonal(computeQ(0)) / (dt * dt);
+        r->dlambda = Q0 * r->dlambda - Q0 * uright->dlambda;
+    } else if (uright == nullptr) {
+        Sparse Qn = invertDiagonal(computeQ(index - factor)) / (dt * dt);
+        r->dlambda = -Qn * uleft->dlambda + Qn * r->dlambda;
     } else {
-        Sparse Qi = invertDiagonal(computeQ(index))/(dt*dt);
-        Sparse Qim1 = invertDiagonal(computeQ(index-factor))/(dt*dt);
-        Sparse KPiKt = K * invertDiagonal(computeP(index - factor)) * K.transpose();
-        r->dlambda = -Qim1*uleft->dlambda + (Qi+Qim1+KPiKt)*r->dlambda - Qi*uright->dlambda;
+        Sparse Qi = invertDiagonal(computeQ(index)) / (dt * dt);
+        Sparse Qim1 = invertDiagonal(computeQ(index - factor)) / (dt * dt);
+        Sparse KPiKt =
+            K * invertDiagonal(computeP(index - factor)) * K.transpose();
+        r->dlambda = -Qim1 * uleft->dlambda + (Qi + Qim1 + KPiKt) * r->dlambda -
+                     Qi * uright->dlambda;
     }
-    
+
     Vector RHS = get_RHS(index);
-    
+
     r->dlambda = r->dlambda - RHS;
-    if (f != nullptr) r->dlambda = r->dlambda - f->dlambda;
+    if (f != nullptr)
+        r->dlambda = r->dlambda - f->dlambda;
 
     return 0;
 }
@@ -291,11 +295,12 @@ int MyBraidApp::TriSolve(braid_Vector uleft_, braid_Vector uright_,
     BraidVector *u = (BraidVector *)u_;
     BraidVector r = *u;
 
-    TriResidual(uleft_, uright_, f_, (braid_Vector) &r, status);
-    
+    // Calculate the residual in the equation and store it in r.
+    TriResidual(uleft_, uright_, f_, (braid_Vector)&r, status);
+
+    // See TriResidual for explanation of this block.
     double t, tprev, tnext, dt;
 
-    /* Get the time-step size */
     status.GetTriT(&t, &tprev, &tnext);
     if (t < tnext) {
         dt = tnext - t;
@@ -304,36 +309,34 @@ int MyBraidApp::TriSolve(braid_Vector uleft_, braid_Vector uright_,
     }
 
     int index, final_index;
-
     status.GetTIndex(&index);
-
     status.GetNTPoints(&final_index);
-
-
     int level;
     status.GetLevel(&level);
-    int factor = pow(2, level);
+    int factor = pow(cfactor, level);
     index = index * factor;
-    dt = factor/(factor/dt - 1);
+    dt = factor / (factor / dt - 1);
 
     Sparse C;
 
-    if (uleft_ == nullptr){
-        C = invertDiagonal(computeQ(0))/(dt*dt);
-    } else if (uright_ == nullptr){
-        C = invertDiagonal(computeQ(index-factor))/(dt*dt);
+    if (uleft_ == nullptr) {
+        C = invertDiagonal(computeQ(0)) / (dt * dt);
+    } else if (uright_ == nullptr) {
+        C = invertDiagonal(computeQ(index - factor)) / (dt * dt);
     } else {
-        Sparse Qi = invertDiagonal(computeQ(index))/(dt*dt);
-        Sparse Qim1 = invertDiagonal(computeQ(index-factor))/(dt*dt);
-        Sparse KPiKt = K * invertDiagonal(computeP(index - factor)) * K.transpose();
+        Sparse Qi = invertDiagonal(computeQ(index)) / (dt * dt);
+        Sparse Qim1 = invertDiagonal(computeQ(index - factor)) / (dt * dt);
+        Sparse KPiKt =
+            K * invertDiagonal(computeP(index - factor)) * K.transpose();
         C = Qi + Qim1 + KPiKt;
     }
 
+    // Since C is tridiagonal, we could use a more efficient solver.
     Eigen::BiCGSTAB<Sparse, Eigen::IncompleteLUT<double>> solver;
     solver.compute(C);
     u->dlambda = u->dlambda - solver.solve(r.dlambda);
-    /* no refinement */
-    status.SetRFactor(1);
+
+    status.SetRFactor(1); // No refinement
 
     return 0;
 }
@@ -347,7 +350,7 @@ int MyBraidApp::Init(double t, braid_Vector *u_ptr_) {
 
     Vector dlambda(DLAMBDA_LEN_SPACE);
 
-    dlambda.setConstant(0.0);
+    dlambda.setRandom();
 
     *u_ptr = new BraidVector(dlambda);
 
@@ -421,8 +424,8 @@ int MyBraidApp::Access(braid_Vector u_, BraidAccessStatus &astatus) {
         for (int i = 0; i < DLAMBDA_LEN_SPACE; i++) {
             dbuffer[i] = u->dlambda[i];
         }
-        MPI_Isend((void *)buffer, message_size, MPI_BYTE, 0,
-                  TAG_WORKER_RESULT, MPI_COMM_WORLD, &send_request);
+        MPI_Isend((void *)buffer, message_size, MPI_BYTE, 0, TAG_WORKER_RESULT,
+                  MPI_COMM_WORLD, &send_request);
         free(buffer);
     }
     return 0;
@@ -432,7 +435,7 @@ int MyBraidApp::Access(braid_Vector u_, BraidAccessStatus &astatus) {
 
 int MyBraidApp::BufSize(int *size_ptr, BraidBufferStatus &bstatus) {
     *size_ptr = sizeof(int) + DLAMBDA_LEN_SPACE * sizeof(double);
-    
+
     return 0;
 }
 
@@ -450,7 +453,7 @@ int MyBraidApp::BufPack(braid_Vector u_, void *buffer_,
     }
 
     bstatus.SetSize(sizeof(int) + DLAMBDA_LEN_SPACE * sizeof(double));
-    
+
     return 0;
 }
 
@@ -467,7 +470,7 @@ int MyBraidApp::BufUnpack(void *buffer_, braid_Vector *u_ptr_,
     for (int i = 0; i < DLAMBDA_LEN_SPACE; i++, dbuffer++) {
         (*u_ptr)->dlambda[i] = *dbuffer;
     }
-    
+
     bstatus.SetSize(sizeof(int) + DLAMBDA_LEN_SPACE * sizeof(double));
 
     return 0;
@@ -480,7 +483,7 @@ int MyBraidApp::BufUnpack(void *buffer_, braid_Vector *u_ptr_,
 int main(int argc, char *argv[]) {
     double tstart, tstop, dx;
     int rank, ntime, mspace;
-    int max_levels, min_coarse, nrelax, nrelaxc, cfactor, maxiter;
+    int max_levels, min_coarse, nrelax, nrelaxc, maxiter;
     int access_level, print_level;
     double tol;
     double time;
@@ -500,7 +503,6 @@ int main(int argc, char *argv[]) {
     nrelax = 25;
     nrelaxc = 25;
     maxiter = 500;
-    cfactor = 2;
     tol = 1.0e-6;
     access_level = 1;
     print_level = 2;
@@ -513,13 +515,16 @@ int main(int argc, char *argv[]) {
     tstop = 1.0;  /* End of time domain*/
 
     /* Set up the app structure */
-    // ntime + 1 for the 2 extra time points caused by the staggered grid
+    // Since we're calculating dlambda, we use ntime + 1 time points.
     auto app = MyBraidApp(MPI_COMM_WORLD, rank, tstart, tstop, ntime + 1);
     app.myid = rank;
     app.ntime = ntime;
     app.mspace = mspace;
     app.dx = dx;
-    app.normcoeff = 0.0001;
+    app.cfactor = 2;
+    app.normcoeff = 0.0001; // The normalization coefficient used to ensure that
+                            // Q_i is invertible.  This will approach zero as
+                            // the algorithm iterates.
 
     /* Initialize XBraid */
 
@@ -532,18 +537,19 @@ int main(int argc, char *argv[]) {
     if (max_levels > 1) {
         core.SetNRelax(max_levels - 1, nrelaxc); /* nrelax on coarsest level */
     }
-    core.SetCFactor(-1, cfactor);
+    core.SetCFactor(-1, app.cfactor);
     core.SetAccessLevel(access_level);
     core.SetPrintLevel(print_level);
     core.SetMaxIter(maxiter);
     core.SetAbsTol(tol);
 
-    /* Parallel-in-time TriMGRIT simulation */
     time = 1.0;
     int iters = 1;
 
     double d_time = time / ntime;
 
+    /* Set up initial values for m, rho, and lambda.  (TriMGRIT won't see these:
+     * it calculates dm, drho, and dlambda.) */
     app.m = std::vector<Vector>();
     for (int i = 0; i < DM_LEN_TIME; i++) {
         Vector m_val(DM_LEN_SPACE);
@@ -565,6 +571,7 @@ int main(int argc, char *argv[]) {
         app.lambda.push_back(lambda_val);
     }
 
+    /* Set up initial and final values for rho. */
     app.q = std::vector<Vector>(Q_LEN_TIME);
 
     double accumulator = 0.0;
@@ -587,14 +594,23 @@ int main(int argc, char *argv[]) {
     }
     app.q[app.q.size() - 1] = q_val / d_time;
 
+    Vector q_long(app.q.size() * app.q[0].size());
+    for (unsigned long i = 0; i < app.q.size(); i++) {
+        for (int j = 0; j < app.q[0].size(); j++) {
+            double val = app.q[i][j];
+            q_long[i * app.q[0].size() + j] = val;
+        }
+    }
+
+    /* Various constant matrices used in the discretization. */
     app.K = Sparse(mspace, mspace + 1);
-    app.X = Sparse(mspace+1, mspace);
+    app.X = Sparse(mspace + 1, mspace);
 
     Sparse D1 = get_derivative_matrix_space(mspace, ntime, d_time);
     Sparse D2 = get_derivative_matrix_time(mspace, ntime, d_time);
     Sparse D = joinlr(D1, D2);
-    Sparse As = get_As(mspace, ntime);
-    Sparse At = get_At(mspace, ntime);
+    Sparse As = get_As(mspace, ntime); // Averaging matrix in space
+    Sparse At = get_At(mspace, ntime); // Averaging matrix in time
 
     for (int i = 0; i < mspace; i++) {
         app.K.insert(i, i) = -1.0 / dx + 1;
@@ -606,15 +622,10 @@ int main(int argc, char *argv[]) {
         app.X.insert(i + 1, i) = 0.25;
     }
 
-    Vector q_long(app.q.size() * app.q[0].size());
-    for (unsigned long i = 0; i < app.q.size(); i++) {
-        for (int j = 0; j < app.q[0].size(); j++) {
-            double val = app.q[i][j];
-            q_long[i * app.q[0].size() + j] = val;
-        }
-    }
-
+    /* Iterative TriMGRIT SQP */
     for (int i_ = 0; i_ < iters; i_++) {
+
+        /* Full Eigen vectors for rho, m, and lambda. */
         Vector rho_long(DRHO_LEN_SPACE * DRHO_LEN_TIME);
         for (int i = 0; i < DRHO_LEN_TIME; i++) {
             for (int j = 0; j < DRHO_LEN_SPACE; j++) {
@@ -634,6 +645,8 @@ int main(int argc, char *argv[]) {
             }
         }
 
+        /* Compute various gradients, culminating in the right-hand side of the
+         * equation we wish to solve. */
         app.GlambdaL = get_GlambdaL(m_long, rho_long, q_long, D);
         Vector GmL1 = 2.0 * m_long.asDiagonal() * As.transpose() * At *
                       rho_long.cwiseInverse();
@@ -649,19 +662,27 @@ int main(int argc, char *argv[]) {
                     D2.transpose() * lambda_long + app.normcoeff * rho_long;
 
         Vector RHS_m(m_long.size());
-        for(int i = 0; i < DM_LEN_TIME; i++){
-            auto sequence = Eigen::seq(i*DM_LEN_SPACE, (i+1)*DM_LEN_SPACE-1);
-            RHS_m(sequence) << invertDiagonal(app.computeP(i)) * app.GmL(sequence);
-        } 
+        for (int i = 0; i < DM_LEN_TIME; i++) {
+            auto sequence =
+                Eigen::seq(i * DM_LEN_SPACE, (i + 1) * DM_LEN_SPACE - 1);
+            RHS_m(sequence)
+                << invertDiagonal(app.computeP(i)) * app.GmL(sequence);
+        }
         Vector RHS_rho(rho_long.size());
-        for(int i = 0; i < DRHO_LEN_TIME; i++){
-            auto sequence = Eigen::seq(i*DRHO_LEN_SPACE, (i+1)*DRHO_LEN_SPACE-1);
-            RHS_rho(sequence) << invertDiagonal(app.computeQ(i)) * app.GrhoL(sequence);
+        for (int i = 0; i < DRHO_LEN_TIME; i++) {
+            auto sequence =
+                Eigen::seq(i * DRHO_LEN_SPACE, (i + 1) * DRHO_LEN_SPACE - 1);
+            RHS_rho(sequence)
+                << invertDiagonal(app.computeQ(i)) * app.GrhoL(sequence);
         }
         app.RHS = -(D1 * RHS_m + D2 * RHS_rho - app.GlambdaL);
 
+        /* At last, run the parallel-in-time TriMGRIT simulation */
         core.Drive();
 
+        /* Collect resultant vectors for dlambda from the cores across which the
+         * simulation was distributed, compute line search, and push results
+         * back to parallel cores. */
         if (rank == 0) {
             // Main processor
             // Receive from access the results of workers' computation
@@ -700,12 +721,20 @@ int main(int argc, char *argv[]) {
             Vector dm_RHS = D2.transpose() * dlambda_long;
             Vector dm_long(DM_LEN_TIME * DM_LEN_SPACE);
             for (int i = 0; i < DM_LEN_TIME; i++) {
-                dm_long(Eigen::seq(i*DM_LEN_SPACE, (i+1)*DM_LEN_SPACE - 1)) << invertDiagonal(app.computeP(i)) * dm_RHS(Eigen::seq(i*DM_LEN_SPACE, (i+1)*DM_LEN_SPACE - 1));
+                dm_long(
+                    Eigen::seq(i * DM_LEN_SPACE, (i + 1) * DM_LEN_SPACE - 1))
+                    << invertDiagonal(app.computeP(i)) *
+                           dm_RHS(Eigen::seq(i * DM_LEN_SPACE,
+                                             (i + 1) * DM_LEN_SPACE - 1));
             }
             Vector drho_RHS = D1.transpose() * dlambda_long;
             Vector drho_long(DRHO_LEN_TIME * DRHO_LEN_SPACE);
             for (int i = 0; i < DRHO_LEN_TIME; i++) {
-                drho_long(Eigen::seq(i*DRHO_LEN_SPACE, (i+1)*DRHO_LEN_SPACE - 1)) << invertDiagonal(app.computeQ(i)) * drho_RHS(Eigen::seq(i*DRHO_LEN_SPACE, (i+1)*DRHO_LEN_SPACE - 1));
+                drho_long(Eigen::seq(i * DRHO_LEN_SPACE,
+                                     (i + 1) * DRHO_LEN_SPACE - 1))
+                    << invertDiagonal(app.computeQ(i)) *
+                           drho_RHS(Eigen::seq(i * DRHO_LEN_SPACE,
+                                               (i + 1) * DRHO_LEN_SPACE - 1));
             }
             double alpha =
                 line_search(dm_long, drho_long, dlambda_long, m_long, rho_long,
@@ -715,19 +744,23 @@ int main(int argc, char *argv[]) {
                    alpha);
 
             for (unsigned long i = 0; i < app.m.size(); i++) {
-                app.m[i] += alpha * dm_long(Eigen::seq(i*DM_LEN_SPACE, (i+1)*DM_LEN_SPACE - 1));
+                app.m[i] +=
+                    alpha * dm_long(Eigen::seq(i * DM_LEN_SPACE,
+                                               (i + 1) * DM_LEN_SPACE - 1));
             }
             for (unsigned long i = 0; i < app.rho.size(); i++) {
-                app.rho[i] += alpha * drho_long(Eigen::seq(i*DRHO_LEN_SPACE, (i+1)*DRHO_LEN_SPACE - 1));
+                app.rho[i] +=
+                    alpha * drho_long(Eigen::seq(i * DRHO_LEN_SPACE,
+                                                 (i + 1) * DRHO_LEN_SPACE - 1));
             }
             for (unsigned long i = 0; i < app.lambda.size(); i++) {
                 app.lambda[i] += alpha * dlambda[i];
             }
             // Send global picture of m, rho, and lambda
             int message_length =
-                sizeof(double) * (DM_LEN_SPACE * DM_LEN_TIME +
-                                  DRHO_LEN_SPACE * DRHO_LEN_TIME +
-                                  DLAMBDA_LEN_SPACE * DLAMBDA_LEN_TIME);
+                sizeof(double) *
+                (DM_LEN_SPACE * DM_LEN_TIME + DRHO_LEN_SPACE * DRHO_LEN_TIME +
+                 DLAMBDA_LEN_SPACE * DLAMBDA_LEN_TIME);
             double *buffer = (double *)malloc(message_length * sizeof(double));
             double *buffer_ptr = buffer;
             for (Vector &m : app.m) {
@@ -752,9 +785,9 @@ int main(int argc, char *argv[]) {
             // access should have already sent their results to the main
             // processor Receive a global picture of m, rho, and lambda
             int message_length =
-                sizeof(double) * (DM_LEN_SPACE * DM_LEN_TIME +
-                                  DRHO_LEN_SPACE * DRHO_LEN_TIME +
-                                  DLAMBDA_LEN_SPACE * DLAMBDA_LEN_TIME);
+                sizeof(double) *
+                (DM_LEN_SPACE * DM_LEN_TIME + DRHO_LEN_SPACE * DRHO_LEN_TIME +
+                 DLAMBDA_LEN_SPACE * DLAMBDA_LEN_TIME);
             double *buffer = (double *)malloc(message_length * sizeof(double));
             MPI_Bcast(buffer, message_length, MPI_DOUBLE, 0, MPI_COMM_WORLD);
             double *buffer_ptr = buffer;
@@ -775,20 +808,18 @@ int main(int argc, char *argv[]) {
             }
             free(buffer);
         }
+
+        /* Decrease the normalization coefficient by a factor of 2. */
         app.normcoeff /= 2;
     }
 
     for (unsigned long i = 0; i < app.rho.size(); i++) {
         std::cout << app.rho[i] << "\n" << std::endl;
     }
-    // TODO:
-    // rank == 0 should print some results
 
     /* Print runtime to file (for runtime comparisons)*/
     // time = (double)(end - start) / CLOCKS_PER_SEC;
     // printf("Total Run Time: %f s \n", time);
-
-    printf("Hit the end. TODO: Print out actual results\n");
 
     MPI_Finalize();
 
