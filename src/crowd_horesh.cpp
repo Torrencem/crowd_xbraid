@@ -18,10 +18,10 @@ double nice_curve(double x, double c) {
 }
 
 /// Initial condition for rho
-double initial_condition(double x) {return 0.5; }// return 0.8*nice_curve(x, 0.3)+0.3*nice_curve(x, 0.7); }
+double initial_condition(double x) {return 0.8*nice_curve(x, 0.3)+0.3*nice_curve(x, 0.7); }
 
 /// Final condition for rho
-double final_condition(double x) { return 0.5; }//0.1*nice_curve(x, 0.3)+0.8*nice_curve(x, 0.7); }
+double final_condition(double x) { return 0.1*nice_curve(x, 0.3)+0.8*nice_curve(x, 0.7); }
 
 Sparse block_diag(const Sparse &diag, const int ncopies) {
     auto m2 =
