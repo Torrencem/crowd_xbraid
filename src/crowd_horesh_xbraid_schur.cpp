@@ -25,8 +25,8 @@
 // crowd from one configuration to another. The math behind the code used here
 // can be found in (TODO: Reference to haber and horesh)
 
-#define CROWD_HORESH_LIBRARY
-#include "crowd_horesh.cpp"
+#include "horesh_utils.cpp"
+#include "initial_final.cpp"
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -46,17 +46,6 @@
 #define DRHO_LEN_TIME (ntime + 1)
 #define DLAMBDA_LEN_TIME (ntime + 2)
 #define Q_LEN_TIME (ntime + 2)
-
-// In MATLAB, this would be diag(1./diag(a))
-Sparse invertDiagonal(const Sparse &a) {
-    Sparse m2(a.rows(), a.cols());
-    for (int i = 0; i < a.rows(); i++) {
-        if (a.coeff(i, i) != 0) {
-            m2.insert(i, i) = 1.0 / a.coeff(i, i);
-        }
-    }
-    return m2;
-}
 
 /*--------------------------------------------------------------------------
  * My App and Vector structures
