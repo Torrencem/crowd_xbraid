@@ -79,8 +79,6 @@ typedef struct _braid_Vector_struct {
     double value;
 } my_Vector;
 
-#include "line_search.c"
-
 int my_Step(braid_App app, braid_Vector ustop, braid_Vector fstop,
             braid_Vector u, braid_StepStatus status) {
     double tstart; /* current time */
@@ -92,6 +90,8 @@ int my_Step(braid_App app, braid_Vector ustop, braid_Vector fstop,
 
     return 0;
 }
+
+#include "line_search.c"
 
 int my_Init(braid_App app, double t, braid_Vector *u_ptr) {
     my_Vector *u;

@@ -14,13 +14,15 @@ double objective(double alpha, braid_BaseVector *us_prev, braid_BaseVector *us, 
     // r is reused on each iteration. It stores the residual calculation
     struct _braid_BaseVector_struct *r;
     _braid_BaseInit(core, app, 0.0, &r);
-    for (int i = 0; i < len; i++) {
+    for (int i = 1; i < len; i++) {
         struct _braid_BaseVector_struct *us_updated;
         _braid_BaseClone(core, app, us[i], &us_updated);
         _braid_BaseSum(core, app, 1 - alpha, us_prev[i], alpha, us_updated);
+        struct _braid_BaseVector_struct *us_im1_updated;
+        _braid_BaseClone(core, app, us[i - 1], &us_im1_updated);
+        _braid_BaseSum(core, app, 1 - alpha, us_prev[i - 1], alpha, us_im1_updated);
         // Level + 1 since we're doing the line search on the coarse grid
-        // Compute residual manually as ustop - Phi(ustart)
-        /* _braid_Residual(core, level + 1, i, ustop, r); */
+        /* _braid_FASResidual(core, level + 1, i, us_updated, r); */
         {
            braid_Real       tol      = _braid_CoreElt(core, tol);
            braid_Int        iter     = _braid_CoreElt(core, niter);
@@ -34,19 +36,19 @@ double objective(double alpha, braid_BaseVector *us_prev, braid_BaseVector *us, 
            braid_Int        ii;
 
            ii = i-ilower;
-           _braid_StepStatusInit(ta[ii-1], ta[ii], i-1, tol, iter, level + 1, nrefine, gupper, status);
+           _braid_StepStatusInit(ta[ii], ta[ii + 1], i, tol, iter, level + 1, nrefine, gupper, status);
 
            // Now compute Phi(us_prev[i])
-        
-           braid_BaseVector phi_u_prev;
-           _braid_BaseClone(core, app, us_prev[i], &phi_u_prev);
-            
-            struct _braid_BaseVector_struct *ustop;
-            _braid_BaseClone(core, app, us[i], &ustop);
 
-            _braid_BaseStep(core, app, ustop, NULL, phi_u_prev, level + 1, status);
+           braid_BaseVector phi_u_prev;
+           _braid_BaseClone(core, app, us_im1_updated, &phi_u_prev);
+
+            /* struct _braid_BaseVector_struct *ustop; */
+            /* _braid_BaseClone(core, app, us[i], &ustop); */
+
+            _braid_BaseStep(core, app, NULL, NULL, phi_u_prev, level + 1, status);
             // r = ustop - \Phi(ustart)
-            _braid_BaseSum(core, app, 1.0, us[i], -1.0, phi_u_prev);
+            _braid_BaseSum(core, app, -1.0, us_updated, 1.0, phi_u_prev);
             r = phi_u_prev;
         }
         double norm;
@@ -54,6 +56,7 @@ double objective(double alpha, braid_BaseVector *us_prev, braid_BaseVector *us, 
         result += norm;
         /* _braid_BaseFree(core, app, us_updated); */
     }
+    printf("Result is %f\n", result);
     return result;
 }
 
