@@ -347,7 +347,7 @@ int MyBraidApp::Init(double t, braid_Vector *u_ptr_) {
 
     Vector dlambda(DLAMBDA_LEN_SPACE);
 
-    dlambda.setConstant(-0.1);
+    dlambda.setConstant(0.0);
 
     *u_ptr = new BraidVector(dlambda);
 
@@ -561,7 +561,7 @@ int main(int argc, char *argv[]) {
     app.lambda = std::vector<Vector>();
     for (int i = 0; i < DLAMBDA_LEN_TIME; i++) {
         Vector lambda_val(DLAMBDA_LEN_SPACE);
-        lambda_val.setConstant(0.1);
+        lambda_val.setConstant(0);
         app.lambda.push_back(lambda_val);
     }
 
