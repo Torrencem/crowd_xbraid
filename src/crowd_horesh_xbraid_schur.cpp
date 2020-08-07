@@ -256,7 +256,6 @@ int MyBraidApp::TriResidual(braid_Vector uleft_, braid_Vector uright_,
     status.GetNTPoints(&final_index);
 //    final_index -= 1; //?
     status.GetTriT(&t, &tprev, &tnext);
-
     /* Get the time-step size */
     if (t < tnext) {
         dt = tnext - t;
@@ -264,10 +263,10 @@ int MyBraidApp::TriResidual(braid_Vector uleft_, braid_Vector uright_,
         dt = t - tprev;
     }
 
-    if (index == 0){
+    if (uleft == nullptr){
         Sparse Q0 = invertDiagonal(computeQ(0))/(dt*dt);
         r->dlambda = Q0*r->dlambda - Q0*uright->dlambda;
-    } else if (index == final_index){
+    } else if (uright == nullptr){
         Sparse Qn = invertDiagonal(computeQ(index-1))/(dt*dt);
         r->dlambda = -Qn*uleft->dlambda + Qn*r->dlambda;
     } else {
@@ -493,11 +492,11 @@ int main(int argc, char *argv[]) {
     ntime = 16;
 
     /* Define some Braid parameters */
-    max_levels = 2;
+    max_levels = 4;
     min_coarse = 1;
-    nrelax = 10;
-    nrelaxc = 10;
-    maxiter = 5;
+    nrelax = 25;
+    nrelaxc = 25;
+    maxiter = 50;
     cfactor = 2;
     tol = 1.0e-6;
     access_level = 1;
