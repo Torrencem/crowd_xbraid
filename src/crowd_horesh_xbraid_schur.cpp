@@ -428,7 +428,7 @@ int MyBraidApp::Access(braid_Vector u_, BraidAccessStatus &astatus) {
 /*------------------------------------*/
 
 int MyBraidApp::BufSize(int *size_ptr, BraidBufferStatus &bstatus) {
-    *size_ptr = DLAMBDA_LEN_SPACE * sizeof(double);
+    *size_ptr = sizeof(int) + DLAMBDA_LEN_SPACE * sizeof(double);
     
     return 0;
 }
@@ -439,14 +439,15 @@ int MyBraidApp::BufPack(braid_Vector u_, void *buffer_,
                         BraidBufferStatus &bstatus) {
     BraidVector *u = (BraidVector *)u_;
     int *buffer = (int *)buffer_;
-
+    
+    
     double *dbuffer = (double *)buffer;
 
     for (int i = 0; i < DLAMBDA_LEN_SPACE; i++, dbuffer++) {
         *dbuffer = u->dlambda[i];
     }
 
-    bstatus.SetSize(DLAMBDA_LEN_SPACE * sizeof(double));
+    bstatus.SetSize(sizeof(int) + DLAMBDA_LEN_SPACE * sizeof(double));
     
     return 0;
 }
@@ -465,7 +466,7 @@ int MyBraidApp::BufUnpack(void *buffer_, braid_Vector *u_ptr_,
         (*u_ptr)->dlambda[i] = *dbuffer;
     }
     
-    bstatus.SetSize(DLAMBDA_LEN_SPACE * sizeof(double));
+    bstatus.SetSize(sizeof(int) + DLAMBDA_LEN_SPACE * sizeof(double));
 
     return 0;
 }
