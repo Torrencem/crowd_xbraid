@@ -191,16 +191,8 @@ MyBraidApp::MyBraidApp(MPI_Comm comm_t_, int rank_, double tstart_,
  *--------------------------------------------------------------------------*/
 
 const Sparse MyBraidApp::computeP(int index){
-    Vector tmp1(DRHO_LEN_SPACE);
-    tmp1.setZero();
-    if (index != 0) {
-        // Able to add rhoi
-        tmp1 += rho[index].cwiseInverse();
-    }
-    if (index != DRHO_LEN_TIME) {
-        // Able to add rhoip1
-        tmp1 += rho[index + 1].cwiseInverse();
-    }
+    assert(index < DRHO_LEN_TIME);
+    Vector tmp1 = rho[index].cwiseInverse() + rho[index + 1].cwiseInverse();
     Vector tmp1_ = X * tmp1;
     auto Pi_ = 2.0 * (tmp1_).asDiagonal();
     return Sparse(Pi_);
@@ -254,7 +246,6 @@ int MyBraidApp::TriResidual(braid_Vector uleft_, braid_Vector uright_,
 
     status.GetTIndex(&index);
     status.GetNTPoints(&final_index);
-//    final_index -= 1; //?
     status.GetTriT(&t, &tprev, &tnext);
     /* Get the time-step size */
     if (t < tnext) {
@@ -262,20 +253,25 @@ int MyBraidApp::TriResidual(braid_Vector uleft_, braid_Vector uright_,
     } else {
         dt = t - tprev;
     }
+    int level;
+    status.GetLevel(&level);
+    int factor = pow(2, level);
+    index = index * factor;
+    dt = factor/(factor/dt - 1);
 
     if (uleft == nullptr){
         Sparse Q0 = invertDiagonal(computeQ(0))/(dt*dt);
         r->dlambda = Q0*r->dlambda - Q0*uright->dlambda;
     } else if (uright == nullptr){
-        Sparse Qn = invertDiagonal(computeQ(index-1))/(dt*dt);
+        Sparse Qn = invertDiagonal(computeQ(index-factor))/(dt*dt);
         r->dlambda = -Qn*uleft->dlambda + Qn*r->dlambda;
     } else {
         Sparse Qi = invertDiagonal(computeQ(index))/(dt*dt);
-        Sparse Qim1 = invertDiagonal(computeQ(index-1))/(dt*dt);
-        Sparse KPiKt = K * invertDiagonal(computeP(index - 1)) * K.transpose();
+        Sparse Qim1 = invertDiagonal(computeQ(index-factor))/(dt*dt);
+        Sparse KPiKt = K * invertDiagonal(computeP(index - factor)) * K.transpose();
         r->dlambda = -Qim1*uleft->dlambda + (Qi+Qim1+KPiKt)*r->dlambda - Qi*uright->dlambda;
     }
-
+    
     Vector RHS = get_RHS(index);
     
     r->dlambda = r->dlambda - RHS;
@@ -312,17 +308,24 @@ int MyBraidApp::TriSolve(braid_Vector uleft_, braid_Vector uright_,
     status.GetTIndex(&index);
 
     status.GetNTPoints(&final_index);
-//    final_index -= 1; //?
+
+
+    int level;
+    status.GetLevel(&level);
+    int factor = pow(2, level);
+    index = index * factor;
+    dt = factor/(factor/dt - 1);
+
     Sparse C;
 
-    if (index == 0){
+    if (uleft_ == nullptr){
         C = invertDiagonal(computeQ(0))/(dt*dt);
-    } else if (index == final_index){
-        C = invertDiagonal(computeQ(index-1))/(dt*dt);
+    } else if (uright_ == nullptr){
+        C = invertDiagonal(computeQ(index-factor))/(dt*dt);
     } else {
         Sparse Qi = invertDiagonal(computeQ(index))/(dt*dt);
-        Sparse Qim1 = invertDiagonal(computeQ(index-1))/(dt*dt);
-        Sparse KPiKt = K * invertDiagonal(computeP(index - 1)) * K.transpose();
+        Sparse Qim1 = invertDiagonal(computeQ(index-factor))/(dt*dt);
+        Sparse KPiKt = K * invertDiagonal(computeP(index - factor)) * K.transpose();
         C = Qi + Qim1 + KPiKt;
     }
 
@@ -344,7 +347,7 @@ int MyBraidApp::Init(double t, braid_Vector *u_ptr_) {
 
     Vector dlambda(DLAMBDA_LEN_SPACE);
 
-    dlambda.setConstant(0.0);
+    dlambda.setConstant(-0.1);
 
     *u_ptr = new BraidVector(dlambda);
 
@@ -439,8 +442,7 @@ int MyBraidApp::BufPack(braid_Vector u_, void *buffer_,
                         BraidBufferStatus &bstatus) {
     BraidVector *u = (BraidVector *)u_;
     int *buffer = (int *)buffer_;
-    
-    
+
     double *dbuffer = (double *)buffer;
 
     for (int i = 0; i < DLAMBDA_LEN_SPACE; i++, dbuffer++) {
@@ -489,8 +491,8 @@ int main(int argc, char *argv[]) {
 
     /* Define space domain. Space domain is between 0 and 1, mspace defines the
      * number of steps */
-    mspace = 16;
-    ntime = 16;
+    mspace = 8;
+    ntime = 8;
 
     /* Define some Braid parameters */
     max_levels = 4;
@@ -580,7 +582,7 @@ int main(int argc, char *argv[]) {
     accumulator = 0.0;
     q_val = Vector(mspace);
     for (int i = 0; i < mspace; i++) {
-        q_val[i] = -0.5; // * final_condition(accumulator);
+        q_val[i] = -0.6; // * final_condition(accumulator);
         accumulator += 1.0 / ((double)mspace - 1.0);
     }
     app.q[app.q.size() - 1] = q_val / d_time;
@@ -595,8 +597,8 @@ int main(int argc, char *argv[]) {
     Sparse At = get_At(mspace, ntime);
 
     for (int i = 0; i < mspace; i++) {
-        app.K.insert(i, i) = -1.0 / dx;
-        app.K.insert(i, i + 1) = 1.0 / dx;
+        app.K.insert(i, i) = -1.0 / dx + 1;
+        app.K.insert(i, i + 1) = 1.0 / dx - 1;
     }
 
     for (int i = 0; i < mspace; i++) {
@@ -656,7 +658,7 @@ int main(int argc, char *argv[]) {
             auto sequence = Eigen::seq(i*DRHO_LEN_SPACE, (i+1)*DRHO_LEN_SPACE-1);
             RHS_rho(sequence) << invertDiagonal(app.computeQ(i)) * app.GrhoL(sequence);
         }
-        app.RHS = D1 * RHS_m + D2 * RHS_rho - app.GlambdaL;
+        app.RHS = -(D1 * RHS_m + D2 * RHS_rho - app.GlambdaL);
 
         core.Drive();
 
