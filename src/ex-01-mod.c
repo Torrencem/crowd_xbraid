@@ -85,6 +85,11 @@ int my_Step(braid_App app, braid_Vector ustop, braid_Vector fstop,
     double tstop;  /* evolve to this time*/
     braid_StepStatusGetTstartTstop(status, &tstart, &tstop);
 
+    int index;
+    braid_StepStatusGetTIndex(status, &index);
+
+    printf("I'm asked to step from %f to %f on index %d\n", tstart, tstop, index);
+
     /* Use backward Euler to propagate solution */
     (u->value) = 1. / (1. + tstop - tstart) * (u->value);
 
@@ -191,9 +196,9 @@ int main(int argc, char *argv[]) {
     int ntime, rank;
 
     /* Define time domain: ntime intervals */
-    ntime = 60;
+    ntime = 50;
     tstart = 0.0;
-    tstop = tstart + ntime / 2.;
+    tstop = 2.0;
 
     /* Initialize MPI */
     MPI_Init(&argc, &argv);

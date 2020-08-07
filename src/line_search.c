@@ -8,6 +8,15 @@
 
 double objective(double alpha, braid_BaseVector *us_prev, braid_BaseVector *us, int len, int level,
                  braid_App app, braid_Core core) {
+    printf("us (len %d) is: ", len);
+    for (int i = 0; i < len; i++) {
+        printf("%f, ", us[i]->userVector->value);
+    }
+    printf("\nus_prev is: ");
+    for (int i = 0; i < len; i++) {
+        printf("%f, ", us_prev[i]->userVector->value);
+    }
+    printf("\n");
     int cfactor;
     _braid_GetCFactor(core, level, &cfactor);
     double result = 0.0;
@@ -23,20 +32,19 @@ double objective(double alpha, braid_BaseVector *us_prev, braid_BaseVector *us, 
         _braid_BaseSum(core, app, 1 - alpha, us_prev[i - 1], alpha, us_im1_updated);
         // Level + 1 since we're doing the line search on the coarse grid
         /* _braid_FASResidual(core, level + 1, i, us_updated, r); */
-        {
            braid_Real       tol      = _braid_CoreElt(core, tol);
            braid_Int        iter     = _braid_CoreElt(core, niter);
            _braid_Grid    **grids    = _braid_CoreElt(core, grids);
            braid_StepStatus status   = (braid_StepStatus)core;
            braid_Int        nrefine  = _braid_CoreElt(core, nrefine);
            braid_Int        gupper   = _braid_CoreElt(core, gupper);
-           braid_Int        ilower   = _braid_GridElt(grids[level], ilower);
-           braid_Real      *ta       = _braid_GridElt(grids[level], ta);
+           braid_Int        ilower   = _braid_GridElt(grids[level + 1], ilower);
+           braid_Real      *ta       = _braid_GridElt(grids[level + 1], ta);
 
            braid_Int        ii;
 
            ii = i-ilower;
-           _braid_StepStatusInit(ta[ii], ta[ii + 1], i, tol, iter, level + 1, nrefine, gupper, status);
+           _braid_StepStatusInit(ta[ii - 1], ta[ii], i, tol, iter, level + 2, nrefine, gupper, status);
 
            // Now compute Phi(us_prev[i])
 
@@ -45,15 +53,15 @@ double objective(double alpha, braid_BaseVector *us_prev, braid_BaseVector *us, 
 
             /* struct _braid_BaseVector_struct *ustop; */
             /* _braid_BaseClone(core, app, us[i], &ustop); */
-
             _braid_BaseStep(core, app, NULL, NULL, phi_u_prev, level + 1, status);
+            double tmp = phi_u_prev->userVector->value;
             // r = ustop - \Phi(ustart)
             _braid_BaseSum(core, app, -1.0, us_updated, 1.0, phi_u_prev);
             r = phi_u_prev;
-        }
         double norm;
         _braid_BaseSpatialNorm(core, app, r, &norm);
         result += norm;
+        printf("Residual is %f for index %d (values are %f and %f)\n", norm, i, tmp, us_updated->userVector->value);
         /* _braid_BaseFree(core, app, us_updated); */
     }
     printf("Result is %f\n", result);
