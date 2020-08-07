@@ -88,15 +88,13 @@ int my_Step(braid_App app, braid_Vector ustop, braid_Vector fstop,
     int index;
     braid_StepStatusGetTIndex(status, &index);
 
-    printf("I'm asked to step from %f to %f on index %d\n", tstart, tstop, index);
-
     /* Use backward Euler to propagate solution */
     (u->value) = 1. / (1. + tstop - tstart) * (u->value);
 
     return 0;
 }
 
-#include "line_search.c"
+#include "split_line_search.c"
 
 int my_Init(braid_App app, double t, braid_Vector *u_ptr) {
     my_Vector *u;

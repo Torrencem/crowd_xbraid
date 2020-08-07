@@ -61,7 +61,7 @@ double objective(double alpha, braid_BaseVector *us_prev, braid_BaseVector *us, 
         double norm;
         _braid_BaseSpatialNorm(core, app, r, &norm);
         result += norm;
-        printf("Residual is %f for index %d (values are %f and %f)\n", norm, i, tmp, us_updated->userVector->value);
+        printf("Residual is %f for index %d (value is %f and %f)\n", norm, i, tmp, us_updated->userVector->value);
         /* _braid_BaseFree(core, app, us_updated); */
     }
     printf("Result is %f\n", result);
@@ -133,7 +133,7 @@ int line_search_sync(braid_App app, braid_SyncStatus status) {
 
     assert(2 * sizeof(int) + my_num_values * bvector_size <= (unsigned long) safe_message_size);
     
-    braid_BaseVector *us = malloc(my_num_values * my_num_values);
+    braid_BaseVector *us = malloc(my_num_values * sizeof(braid_BaseVector));
 
     for (int i = 0; i < my_num_values; i++) {
         int fine_index;
