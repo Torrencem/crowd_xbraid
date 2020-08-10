@@ -21,8 +21,8 @@ global S
 global K
 global X
 
-space_steps = 80;
-time_steps = 80;
+space_steps = 8;
+time_steps = 8;
 show = @(x) surf(reshape(x, [space_steps, time_steps+1]));
 showm = @(x) surf(reshape(x, [space_steps+1, time_steps]));
 showl = @(x) surf(reshape(x, [space_steps, time_steps+2]));
@@ -260,32 +260,27 @@ function reward = reward(x, dm, drho, dlambda, normcoeff)
 end
 
 function alpha = line_search(dm, drho, dlambda, normcoeff)
-    f = @(x) reward(x, dm, drho, dlambda, normcoeff);
-    options = optimoptions(@fminunc, 'Display', 'none');
-    alpha = fminunc(f, 1, options); 
-    
-%     global trust_radius
-% 
-%     a = -trust_radius;
-%     b = trust_radius;
+    trust_radius = 1;
+    a = -trust_radius;
+    b = trust_radius;
 
-%     f = @(x) reward(x, dm, drho, dlambda);
-%     gr = (1+sqrt(5))/2;
-%     
-%     c = b - (b - a)/gr;
-%     d = a + (b - a)/gr;
-%     
-%     while abs(c-d) > 1e-5
-%         if f(c) < f(d)
-%             b = d;
-%         else
-%             a = c;
-%         end
-%         c = b - (b - a)/gr;
-%         d = a + (b - a)/gr;
-%     end5
-%     
-%     alpha = (a+b)/2;
-%     fprintf("Alpha: %f\n", alpha)
-%     fprintf("f(Alpha): %f\n", f(alpha));
+    f = @(x) reward(x, dm, drho, dlambda, normcoeff);
+    gr = (1+sqrt(5))/2;
+    
+    c = b - (b - a)/gr;
+    d = a + (b - a)/gr;
+    
+    while abs(c-d) > 1e-5
+        if f(c) < f(d)
+            b = d;
+        else
+            a = c;
+        end
+        c = b - (b - a)/gr;
+        d = a + (b - a)/gr;
+    end
+    
+    alpha = (a+b)/2;
+    fprintf("Alpha: %f\n", alpha)
+    fprintf("f(Alpha): %f\n", f(alpha));
 end
