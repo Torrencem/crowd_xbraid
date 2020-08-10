@@ -339,7 +339,7 @@ int MyBraidApp::Init(double t, braid_Vector *u_ptr_) {
 
     *u_ptr = new BraidVector(mspace);
 
-    (*u_ptr)->dlambda.setRandom();
+    (*u_ptr)->dlambda.setConstant(0.1);
 
     return 0;
 }
@@ -399,8 +399,8 @@ int MyBraidApp::Access(braid_Vector u_, BraidAccessStatus &astatus) {
     astatus.GetDone(&done);
     if (done) {
         astatus.GetTIndex(&index);
-        std::cout << "At index " << index << std::endl;
-        std::cout << "dlambda is " << u->dlambda << std::endl;
+//        std::cout << "At index " << index << std::endl;
+//        std::cout << "dlambda is " << u->dlambda << std::endl;
 
         MPI_Request send_request;
         int message_size = sizeof(int) + sizeof(double) * DLAMBDA_LEN_SPACE;
@@ -481,16 +481,16 @@ int main(int argc, char *argv[]) {
 
     // Define space domain. Space domain is between 0 and 1, mspace defines the
     // number of steps.
-    mspace = 16;
-    ntime = 16;
+    mspace = 8;
+    ntime = 8;
 
     // Define some Braid parameters
     max_levels = 4;
     min_coarse = 1;
     nrelax = 25;
     nrelaxc = 25;
-    maxiter = 4;
-    tol = 1.0e-6;
+    maxiter = 6000;
+    tol = 1.0e-10;
     access_level = 1;
     print_level = 2;
 
@@ -531,7 +531,7 @@ int main(int argc, char *argv[]) {
     core.SetAbsTol(tol);
 
     time = 1.0;
-    int iters = 1;
+    int iters = 3;
 
     double d_time = time / ntime;
 
@@ -554,7 +554,7 @@ int main(int argc, char *argv[]) {
     app.lambda = std::vector<Vector>();
     for (int i = 0; i < DLAMBDA_LEN_TIME; i++) {
         Vector lambda_val(DLAMBDA_LEN_SPACE);
-        lambda_val.setConstant(0);
+        lambda_val.setConstant(0.1);
         app.lambda.push_back(lambda_val);
     }
 
@@ -564,7 +564,7 @@ int main(int argc, char *argv[]) {
     double accumulator = 0.0;
     Vector q_val(Q_LEN_SPACE);
     for (int i = 0; i < mspace; i++) {
-        q_val[i] = initial_condition(accumulator);
+        q_val[i] = 0.5; //initial_condition(accumulator);
         accumulator += 1.0 / ((double)mspace - 1.0);
     }
     app.q[0] = q_val / d_time;
@@ -576,7 +576,7 @@ int main(int argc, char *argv[]) {
     accumulator = 0.0;
     q_val = Vector(mspace);
     for (int i = 0; i < mspace; i++) {
-        q_val[i] = -1.0 * final_condition(accumulator);
+        q_val[i] = -1.0 * 0.5; //final_condition(accumulator);
         accumulator += 1.0 / ((double)mspace - 1.0);
     }
     app.q[app.q.size() - 1] = q_val / d_time;
@@ -705,24 +705,25 @@ int main(int argc, char *argv[]) {
                     dlambda_long[i * dlambda[0].size() + j] = dlambda[i][j];
                 }
             }
-            Vector dm_RHS = D2.transpose() * dlambda_long;
+            Vector dm_RHS = D1.transpose() * dlambda_long + app.GmL;
             Vector dm_long(DM_LEN_TIME * DM_LEN_SPACE);
             for (int i = 0; i < DM_LEN_TIME; i++) {
                 dm_long(
                     Eigen::seq(i * DM_LEN_SPACE, (i + 1) * DM_LEN_SPACE - 1))
-                    << invertDiagonal(app.computeP(i)) *
+                    << -1.0 * invertDiagonal(app.computeP(i)) *
                            dm_RHS(Eigen::seq(i * DM_LEN_SPACE,
                                              (i + 1) * DM_LEN_SPACE - 1));
             }
-            Vector drho_RHS = D1.transpose() * dlambda_long;
+            Vector drho_RHS = D2.transpose() * dlambda_long + app.GrhoL;
             Vector drho_long(DRHO_LEN_TIME * DRHO_LEN_SPACE);
             for (int i = 0; i < DRHO_LEN_TIME; i++) {
                 drho_long(Eigen::seq(i * DRHO_LEN_SPACE,
                                      (i + 1) * DRHO_LEN_SPACE - 1))
-                    << invertDiagonal(app.computeQ(i)) *
+                    << -1.0 * invertDiagonal(app.computeQ(i)) *
                            drho_RHS(Eigen::seq(i * DRHO_LEN_SPACE,
                                                (i + 1) * DRHO_LEN_SPACE - 1));
             }
+
             double alpha =
                 line_search(dm_long, drho_long, dlambda_long, m_long, rho_long,
                             lambda_long, As, At, D1, D2, q_long, D);
