@@ -1,5 +1,6 @@
 **/*.out.*
 crowd_horesh_xbraid
+crowd_horesh_xbraid_schur
 ex-01-mod
 crowd_horesh
 **/*.dSYM/*

@@ -1,4 +1,4 @@
-/*BHEADER**********************************************************************
+/*HEADER**********************************************************************
  * Written by Isaiah Meyers, Joseph Munar, Eric Neville, Tom Overman
  *
  * This file is part of XBraid. For support, post issues to the XBraid Github
@@ -55,7 +55,7 @@ class BraidVector {
   public:
     Vector dlambda;
 
-    BraidVector(Vector dlambda_) : dlambda(dlambda_) {}
+    BraidVector(Vector &dlambda_) : dlambda(dlambda_) {}
 
     BraidVector(int mspace) {
         this->dlambda = Vector(DLAMBDA_LEN_SPACE);
@@ -337,11 +337,9 @@ int MyBraidApp::TriSolve(braid_Vector uleft_, braid_Vector uright_,
 int MyBraidApp::Init(double t, braid_Vector *u_ptr_) {
     BraidVector **u_ptr = (BraidVector **)u_ptr_;
 
-    Vector dlambda(DLAMBDA_LEN_SPACE);
+    *u_ptr = new BraidVector(mspace);
 
-    dlambda.setRandom();
-
-    *u_ptr = new BraidVector(dlambda);
+    (*u_ptr)->dlambda.setRandom();
 
     return 0;
 }
@@ -405,7 +403,7 @@ int MyBraidApp::Access(braid_Vector u_, BraidAccessStatus &astatus) {
         std::cout << "dlambda is " << u->dlambda << std::endl;
 
         MPI_Request send_request;
-        int message_size = sizeof(int) + sizeof(double) * DLAMBDA_LEN_TIME;
+        int message_size = sizeof(int) + sizeof(double) * DLAMBDA_LEN_SPACE;
         char *buffer = (char *)calloc(message_size, 1);
         int *ibuffer = (int *)buffer;
         *(ibuffer++) = index;
@@ -423,7 +421,7 @@ int MyBraidApp::Access(braid_Vector u_, BraidAccessStatus &astatus) {
 //------------------------------------
 
 int MyBraidApp::BufSize(int *size_ptr, BraidBufferStatus &bstatus) {
-    *size_ptr = sizeof(int) + DLAMBDA_LEN_SPACE * sizeof(double);
+    *size_ptr = DLAMBDA_LEN_SPACE * sizeof(double);
 
     return 0;
 }
@@ -433,15 +431,14 @@ int MyBraidApp::BufSize(int *size_ptr, BraidBufferStatus &bstatus) {
 int MyBraidApp::BufPack(braid_Vector u_, void *buffer_,
                         BraidBufferStatus &bstatus) {
     BraidVector *u = (BraidVector *)u_;
-    int *buffer = (int *)buffer_;
 
-    double *dbuffer = (double *)buffer;
+    double *dbuffer = (double *)buffer_;
 
-    for (int i = 0; i < DLAMBDA_LEN_SPACE; i++, dbuffer++) {
-        *dbuffer = u->dlambda[i];
+    for (int i = 0; i < DLAMBDA_LEN_SPACE; i++) {
+        dbuffer[i] = u->dlambda[i];
     }
 
-    bstatus.SetSize(sizeof(int) + DLAMBDA_LEN_SPACE * sizeof(double));
+    bstatus.SetSize(DLAMBDA_LEN_SPACE * sizeof(double));
 
     return 0;
 }
@@ -452,15 +449,16 @@ int MyBraidApp::BufUnpack(void *buffer_, braid_Vector *u_ptr_,
                           BraidBufferStatus &bstatus) {
     BraidVector **u_ptr = (BraidVector **)u_ptr_;
 
-    int *buffer = (int *)buffer_;
+    *u_ptr = new BraidVector(mspace);
 
-    double *dbuffer = (double *)buffer;
+    double *dbuffer = (double *)buffer_;
 
-    for (int i = 0; i < DLAMBDA_LEN_SPACE; i++, dbuffer++) {
-        (*u_ptr)->dlambda[i] = *dbuffer;
+    for (int i = 0; i < DLAMBDA_LEN_SPACE; i++) {
+        double val = dbuffer[i];
+        (*u_ptr)->dlambda[i] = val;
     }
 
-    bstatus.SetSize(sizeof(int) + DLAMBDA_LEN_SPACE * sizeof(double));
+    bstatus.SetSize(DLAMBDA_LEN_SPACE * sizeof(double));
 
     return 0;
 }
@@ -491,7 +489,7 @@ int main(int argc, char *argv[]) {
     min_coarse = 1;
     nrelax = 25;
     nrelaxc = 25;
-    maxiter = 50;
+    maxiter = 4;
     tol = 1.0e-6;
     access_level = 1;
     print_level = 2;
