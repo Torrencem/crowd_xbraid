@@ -800,8 +800,10 @@ int main(int argc, char *argv[]) {
         app.normcoeff /= 2;
     }
 
-    for (unsigned long i = 0; i < app.rho.size(); i++) {
-        std::cout << app.rho[i] << "\n" << std::endl;
+    for (int i = 0; i < DRHO_LEN_TIME; i++) {
+        for (int j = 0; j < DRHO_LEN_SPACE; j++){
+            std::cout << i << ", " << j << ": " << app.rho[i](j) << std::endl;
+        }
     }
 
     // Print runtime to file (for runtime comparisons)
