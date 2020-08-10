@@ -104,11 +104,7 @@ list:
 xbraid: ./xbraid/braid/*.c
 	cd xbraid; $(MAKE) braid
 
-ex-01-mod: src/ex-01-mod.c $(BRAID_LIB_FILE)
-	@echo "Building" $@ "..."
-	$(MPICC) $(CFLAGS) $(BRAID_FLAGS) -o ex-01-mod src/ex-01-mod.c $(BRAID_LIB_FILE) $(LFLAGS) $(EXTRAFLAGS)
-
-trimgrit-burgers: src/trimgrit-burgers.c $(BRAID_LIB_FILE)
+trimgrit-burgers: src/trimgrit-burgers.c $(BRAID_LIB_FILE) src/split_line_search.c
 	@echo "Building" $@ "..."
 	$(MPICC) $(CFLAGS) $(BRAID_FLAGS) -o trimgrit-burgers src/trimgrit-burgers.c $(BRAID_LIB_FILE) $(LFLAGS) $(EXTRAFLAGS)
 
@@ -132,9 +128,6 @@ run_horesh_xbraid: crowd_horesh_xbraid
 
 run_horesh_schur: crowd_horesh_xbraid_schur
 	./crowd_horesh_xbraid_schur
-
-run_ex_01_mod: ex-01-mod
-	./ex-01-mod
 
 clean:
 	rm -f *.out.*
