@@ -57,7 +57,7 @@ else ifeq ($(shell uname -s),Linux)
    MPICXX = mpicxx
    MPIF90 = mpif90
    LFLAGS = -lm
-   EXTRAFLAGS = -std=c++14
+   EXTRAFLAGS = -std=c++11
    ifeq ($(optlevel),DEBUG)
       CFLAGS = -g -Wall -D NOINLINE
       CXXFLAGS = -g -Wall -D NOINLINE
