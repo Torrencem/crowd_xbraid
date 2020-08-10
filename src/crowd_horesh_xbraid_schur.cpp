@@ -481,18 +481,18 @@ int main(int argc, char *argv[]) {
 
     // Define space domain. Space domain is between 0 and 1, mspace defines the
     // number of steps.
-    mspace = 8;
-    ntime = 8;
+    mspace = 10;
+    ntime = 32;
 
     // Define some Braid parameters
     max_levels = 2;
     min_coarse = 1;
-    nrelax = 25;
-    nrelaxc = 25;
-    maxiter = 6000;
-    tol = 1.0e-10;
+    nrelax = 2;
+    nrelaxc = 10;
+    maxiter = 300;
+    tol = 1.0e-8;
     access_level = 1;
-    print_level = 2;
+    print_level = -1;
 
     // Define the space step
     dx = (double)1 / (mspace + 1);
@@ -531,7 +531,7 @@ int main(int argc, char *argv[]) {
     core.SetAbsTol(tol);
 
     time = 1.0;
-    int iters = 2;
+    int iters = 3;
 
     double d_time = time / ntime;
 
@@ -560,7 +560,8 @@ int main(int argc, char *argv[]) {
 
     // Set up initial and final values for rho.
     app.q = std::vector<Vector>(Q_LEN_TIME);
-
+    
+    bool first_iteration = true;
     double accumulator = 0.0;
     Vector q_val(Q_LEN_SPACE);
     for (int i = 0; i < mspace; i++) {
@@ -663,86 +664,163 @@ int main(int argc, char *argv[]) {
                 << invertDiagonal(app.computeQ(i)) * app.GrhoL(sequence);
         }
         app.RHS = -(D1 * RHS_m + D2 * RHS_rho - app.GlambdaL);
-        // At last, run the parallel-in-time TriMGRIT simulation
-        core.Drive();
 
-        // Collect resultant vectors for dlambda from the cores across which the
-        // simulation was distributed, compute line search, and push results
-        // back to parallel cores.
-        if (rank == 0) {
-            // Main processor
-            // Receive from access the results of workers' computation
-            std::vector<Vector> dlambda(DLAMBDA_LEN_TIME);
+        // On the first iteration of our minimization, we run a traditional step so that
+        // XBraid isn't given garbage that takes forever to converge
 
-            int num_received = 0;
-            int num_messages_expected = DLAMBDA_LEN_TIME;
+        if (first_iteration) {
+            first_iteration = false;
+            Vector m((mspace + 1) * ntime);
+            Vector rho(mspace * (ntime + 1));
+            Vector lambda(mspace * (ntime + 2));
+            m.setConstant(0.0);
+            rho.setConstant(0.5);
+            lambda.setConstant(0.1);
 
-            while (num_received < num_messages_expected) {
-                int index;
-                int message_size =
-                    sizeof(int) + sizeof(double) * DLAMBDA_LEN_SPACE;
-                char *buffer = (char *)malloc(message_size);
-                MPI_Recv((void *)buffer, message_size, MPI_BYTE, MPI_ANY_SOURCE,
-                         TAG_WORKER_RESULT, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-                // printf("received: %d out of %d\n", num_received,
-                // num_messages_expected);
-                int *buffer_ = (int *)buffer;
-                index = *(buffer_++);
-                double *dbuffer = (double *)buffer_;
-                Vector dlambda_val(DLAMBDA_LEN_SPACE);
-                for (int i = 0; i < DLAMBDA_LEN_SPACE; i++) {
-                    dlambda_val[i] = dbuffer[i];
-                }
-                dlambda[index] = dlambda_val;
-                num_received++;
-                free(buffer);
-            }
-            // Compute global new m, rho, and lambda using line search etc.
-            Vector dlambda_long(dlambda.size() * dlambda[0].size());
-            for (unsigned long i = 0; i < dlambda.size(); i++) {
-                for (int j = 0; j < dlambda[0].size(); j++) {
-                    dlambda_long[i * dlambda[0].size() + j] = dlambda[i][j];
+            Sparse filler_zeros(D.rows(), D.rows());
+            Sparse A_hat = get_A_hat(rho, m, As, At);
+
+            Sparse A =
+                jointb(joinlr(A_hat, D.transpose()), joinlr(D, filler_zeros));
+
+            Vector GwL = get_GwL(m, rho, lambda, As, At, D1, D2);
+            Vector GlambdaL = get_GlambdaL(m, rho, q_long, D);
+            Vector b(GwL.size() + GlambdaL.size());
+            for (int i = 0; i < GwL.size() + GlambdaL.size(); i++) {
+                if (i >= GwL.size()) {
+                    b[i] = GlambdaL[i - GwL.size()];
+                } else {
+                    b[i] = GwL[i];
                 }
             }
-            Vector dm_RHS = D1.transpose() * dlambda_long + app.GmL;
-            Vector dm_long(DM_LEN_TIME * DM_LEN_SPACE);
-            for (int i = 0; i < DM_LEN_TIME; i++) {
-                dm_long(
-                    Eigen::seq(i * DM_LEN_SPACE, (i + 1) * DM_LEN_SPACE - 1))
-                    << -1.0 * invertDiagonal(app.computeP(i)) *
-                           dm_RHS(Eigen::seq(i * DM_LEN_SPACE,
-                                             (i + 1) * DM_LEN_SPACE - 1));
+
+            Eigen::BiCGSTAB<Sparse, Eigen::IncompleteLUT<double>> solver;
+            solver.compute(A);
+            if (solver.info() != Eigen::Success) {
+                printf("Error decomposing A!\n");
+                exit(1);
             }
-            Vector drho_RHS = D2.transpose() * dlambda_long + app.GrhoL;
-            Vector drho_long(DRHO_LEN_TIME * DRHO_LEN_SPACE);
-            for (int i = 0; i < DRHO_LEN_TIME; i++) {
-                drho_long(Eigen::seq(i * DRHO_LEN_SPACE,
-                                     (i + 1) * DRHO_LEN_SPACE - 1))
-                    << -1.0 * invertDiagonal(app.computeQ(i)) *
-                           drho_RHS(Eigen::seq(i * DRHO_LEN_SPACE,
-                                               (i + 1) * DRHO_LEN_SPACE - 1));
+            Vector solution = solver.solve(b);
+            if (solver.info() != Eigen::Success) {
+                printf("Error solving Ax = b!\n");
+                exit(1);
             }
 
-            double alpha =
-                line_search(dm_long, drho_long, dlambda_long, m_long, rho_long,
-                            lambda_long, As, At, D1, D2, q_long, D);
+            Eigen::Map<Vector> dm(solution.data(), (mspace + 1) * ntime);
+            int start = (mspace + 1) * ntime;
+            int len = mspace * (ntime + 1);
+            Eigen::Map<Vector> drho(solution.data() + start, len);
+            start += len;
+            len = solution.size() - start;
+            Eigen::Map<Vector> dlambda(solution.data() + start, len);
+        
+            Vector dm_(dm);
+            Vector drho_(drho);
+            Vector dlambda_(dlambda);
 
-            printf("Line search completed for iteration %d. alpha = %f\n", i_,
-                   alpha);
+            double alpha = line_search(dm_, drho_, dlambda_, m, rho, lambda, As, At,
+                                       D1, D2, q_long, D);
 
+            // Put the results in app.m, app.rho, app.lambda
             for (unsigned long i = 0; i < app.m.size(); i++) {
                 app.m[i] +=
-                    alpha * dm_long(Eigen::seq(i * DM_LEN_SPACE,
+                    alpha * dm(Eigen::seq(i * DM_LEN_SPACE,
                                                (i + 1) * DM_LEN_SPACE - 1));
             }
             for (unsigned long i = 0; i < app.rho.size(); i++) {
                 app.rho[i] +=
-                    alpha * drho_long(Eigen::seq(i * DRHO_LEN_SPACE,
+                    alpha * drho(Eigen::seq(i * DRHO_LEN_SPACE,
                                                  (i + 1) * DRHO_LEN_SPACE - 1));
             }
             for (unsigned long i = 0; i < app.lambda.size(); i++) {
-                app.lambda[i] += alpha * dlambda[i];
+                app.lambda[i] += alpha * dlambda(Eigen::seq(i * DLAMBDA_LEN_SPACE,
+                                                                (i + 1) * DLAMBDA_LEN_SPACE - 1));
             }
+        } else {
+            // At last, run the parallel-in-time TriMGRIT simulation
+            core.Drive();
+
+            // Collect resultant vectors for dlambda from the cores across which the
+            // simulation was distributed, compute line search, and push results
+            // back to parallel cores.
+            if (rank == 0) {
+                // Main processor
+                // Receive from access the results of workers' computation
+                std::vector<Vector> dlambda(DLAMBDA_LEN_TIME);
+
+                int num_received = 0;
+                int num_messages_expected = DLAMBDA_LEN_TIME;
+
+                while (num_received < num_messages_expected) {
+                    int index;
+                    int message_size =
+                        sizeof(int) + sizeof(double) * DLAMBDA_LEN_SPACE;
+                    char *buffer = (char *)malloc(message_size);
+                    MPI_Recv((void *)buffer, message_size, MPI_BYTE, MPI_ANY_SOURCE,
+                             TAG_WORKER_RESULT, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+                    // printf("received: %d out of %d\n", num_received,
+                    // num_messages_expected);
+                    int *buffer_ = (int *)buffer;
+                    index = *(buffer_++);
+                    double *dbuffer = (double *)buffer_;
+                    Vector dlambda_val(DLAMBDA_LEN_SPACE);
+                    for (int i = 0; i < DLAMBDA_LEN_SPACE; i++) {
+                        dlambda_val[i] = dbuffer[i];
+                    }
+                    dlambda[index] = dlambda_val;
+                    num_received++;
+                    free(buffer);
+                }
+                // Compute global new m, rho, and lambda using line search etc.
+                Vector dlambda_long(dlambda.size() * dlambda[0].size());
+                for (unsigned long i = 0; i < dlambda.size(); i++) {
+                    for (int j = 0; j < dlambda[0].size(); j++) {
+                        dlambda_long[i * dlambda[0].size() + j] = dlambda[i][j];
+                    }
+                }
+                Vector dm_RHS = D1.transpose() * dlambda_long + app.GmL;
+                Vector dm_long(DM_LEN_TIME * DM_LEN_SPACE);
+                for (int i = 0; i < DM_LEN_TIME; i++) {
+                    dm_long(
+                        Eigen::seq(i * DM_LEN_SPACE, (i + 1) * DM_LEN_SPACE - 1))
+                        << -1.0 * invertDiagonal(app.computeP(i)) *
+                               dm_RHS(Eigen::seq(i * DM_LEN_SPACE,
+                                                 (i + 1) * DM_LEN_SPACE - 1));
+                }
+                Vector drho_RHS = D2.transpose() * dlambda_long + app.GrhoL;
+                Vector drho_long(DRHO_LEN_TIME * DRHO_LEN_SPACE);
+                for (int i = 0; i < DRHO_LEN_TIME; i++) {
+                    drho_long(Eigen::seq(i * DRHO_LEN_SPACE,
+                                         (i + 1) * DRHO_LEN_SPACE - 1))
+                        << -1.0 * invertDiagonal(app.computeQ(i)) *
+                               drho_RHS(Eigen::seq(i * DRHO_LEN_SPACE,
+                                                   (i + 1) * DRHO_LEN_SPACE - 1));
+                }
+
+                double alpha =
+                    line_search(dm_long, drho_long, dlambda_long, m_long, rho_long,
+                                lambda_long, As, At, D1, D2, q_long, D);
+
+                printf("Line search completed for iteration %d. alpha = %f\n", i_,
+                       alpha);
+
+                for (unsigned long i = 0; i < app.m.size(); i++) {
+                    app.m[i] = m_long(Eigen::seq(i * DM_LEN_SPACE, (i + 1) * DM_LEN_SPACE - 1)) +
+                        alpha * dm_long(Eigen::seq(i * DM_LEN_SPACE,
+                                                   (i + 1) * DM_LEN_SPACE - 1));
+                }
+                for (unsigned long i = 0; i < app.rho.size(); i++) {
+                    app.rho[i] = rho_long(Eigen::seq(i * DRHO_LEN_SPACE, (i + 1) * DRHO_LEN_SPACE - 1)) +
+                        alpha * drho_long(Eigen::seq(i * DRHO_LEN_SPACE,
+                                                     (i + 1) * DRHO_LEN_SPACE - 1));
+                }
+                for (unsigned long i = 0; i < app.lambda.size(); i++) {
+                    app.lambda[i] = lambda_long(Eigen::seq(i * DLAMBDA_LEN_SPACE, (i + 1) * DLAMBDA_LEN_SPACE - 1)) +
+                        alpha * dlambda[i];
+                }
+            }
+        }
+        if (rank == 0) {
             // Send global picture of m, rho, and lambda
             int message_length =
                 sizeof(double) *
