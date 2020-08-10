@@ -485,7 +485,7 @@ int main(int argc, char *argv[]) {
     ntime = 8;
 
     // Define some Braid parameters
-    max_levels = 4;
+    max_levels = 2;
     min_coarse = 1;
     nrelax = 25;
     nrelaxc = 25;
@@ -531,7 +531,7 @@ int main(int argc, char *argv[]) {
     core.SetAbsTol(tol);
 
     time = 1.0;
-    int iters = 3;
+    int iters = 2;
 
     double d_time = time / ntime;
 
