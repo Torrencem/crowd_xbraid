@@ -564,7 +564,7 @@ int main(int argc, char *argv[]) {
     double accumulator = 0.0;
     Vector q_val(Q_LEN_SPACE);
     for (int i = 0; i < mspace; i++) {
-        q_val[i] = 0.5; //initial_condition(accumulator);
+        q_val[i] = initial_condition(accumulator);
         accumulator += 1.0 / ((double)mspace - 1.0);
     }
     app.q[0] = q_val / d_time;
@@ -576,7 +576,7 @@ int main(int argc, char *argv[]) {
     accumulator = 0.0;
     q_val = Vector(mspace);
     for (int i = 0; i < mspace; i++) {
-        q_val[i] = -1.0 * 0.5; //final_condition(accumulator);
+        q_val[i] = -1.0 * final_condition(accumulator);
         accumulator += 1.0 / ((double)mspace - 1.0);
     }
     app.q[app.q.size() - 1] = q_val / d_time;
