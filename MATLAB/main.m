@@ -54,8 +54,8 @@ for i=1:space_steps
     X(i+1, i) = 1/4;
 end
 
-q(1:space_steps) = arrayfun(@(x) 0.3*expodist(x, 0.7) + 0.2*expodist(x, 0.2) +0.1, 0:1/(space_steps-1):1);
-q(space_steps * (time_steps + 1) + 1: space_steps * (time_steps + 2)) = -1*arrayfun(@(x) 0.5*expodist(x, 0.4)+0.1, 0:1/(space_steps-1):1);
+q(1:space_steps) = arrayfun(@(x) 0.8*expodist(x, 0.3) + 0.3*expodist(x, 0.7) +0.1, 0:1/(space_steps-1):1);
+q(space_steps * (time_steps + 1) + 1: space_steps * (time_steps + 2)) = -1*arrayfun(@(x) 0.1*expodist(x, 0.3)+0.8*expodist(x, 0.7), 0:1/(space_steps-1):1);
 
 q = q * (1/d_time);
 
@@ -67,7 +67,7 @@ end
 
 iters = 10;
 for i=1:iters
-    normcoeff = 0.001*2^(-3*i);
+    normcoeff = 0.0001;
     recalc_matrices(m, rho, normcoeff);
     sizeD = size(D);
     b = D*inv(A_hat)*get_GwL(m, rho, lambda, normcoeff) - get_GlambdaL(m, rho);

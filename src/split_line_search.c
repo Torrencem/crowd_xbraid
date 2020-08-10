@@ -54,7 +54,7 @@ int line_search_sync(braid_App app, braid_SyncStatus status) {
     lower_t = grid->ilower;
 
     int bvector_size;
-    _braid_BaseBufSize(core, app, &bvector_size, (braid_BufferStatus) core);
+    _braid_BaseBufSize(core, app, &bvector_size, (braid_BufferStatus)core);
 
     int my_num_values = upper_t - lower_t + 1; // Assuming upper_t is inclusive
 
@@ -79,8 +79,10 @@ int line_search_sync(braid_App app, braid_SyncStatus status) {
     // Now that we have us...
     int rank;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-    
-    printf("Calling line_search sync at level 0 on iteration %d (I'm rank %d)\n", iter, rank);
+
+    printf(
+        "Calling line_search sync at level 0 on iteration %d (I'm rank %d)\n",
+        iter, rank);
 
     if (iter != 0) {
         // Receive us_prev from last iteration

@@ -276,7 +276,7 @@ double line_search(Vector &dm, Vector &drho, Vector &dlambda, Vector &m,
         return reward(x, dm, drho, dlambda, m, rho, lambda, As, At, D1, D2, q,
                       D);
     };
-    double tmp = minarg(f, -0.1, 0.1, 1e-8);
+    double tmp = minarg(f, -1.0, 1.0, 1e-8);
     return tmp;
 }
 

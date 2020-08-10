@@ -399,8 +399,8 @@ int MyBraidApp::Access(braid_Vector u_, BraidAccessStatus &astatus) {
     astatus.GetDone(&done);
     if (done) {
         astatus.GetTIndex(&index);
-//        std::cout << "At index " << index << std::endl;
-//        std::cout << "dlambda is " << u->dlambda << std::endl;
+        //        std::cout << "At index " << index << std::endl;
+        //        std::cout << "dlambda is " << u->dlambda << std::endl;
 
         MPI_Request send_request;
         int message_size = sizeof(int) + sizeof(double) * DLAMBDA_LEN_SPACE;
@@ -663,7 +663,6 @@ int main(int argc, char *argv[]) {
                 << invertDiagonal(app.computeQ(i)) * app.GrhoL(sequence);
         }
         app.RHS = -(D1 * RHS_m + D2 * RHS_rho - app.GlambdaL);
-
         // At last, run the parallel-in-time TriMGRIT simulation
         core.Drive();
 
