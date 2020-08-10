@@ -54,7 +54,7 @@ else ifeq ($(findstring vulcan,$(HOSTNAME)),vulcan)
    endif
 else ifeq ($(shell uname -s),Linux)
    MPICC = mpicc
-   MPICXX = mpiCC
+   MPICXX = mpicxx
    MPIF90 = mpif90
    LFLAGS = -lm
    EXTRAFLAGS = /usr/lib/x86_64-linux-gnu/liblapacke.a /usr/lib/x86_64-linux-gnu/liblapack.a
@@ -69,7 +69,7 @@ else ifeq ($(shell uname -s),Linux)
    endif
 else
    MPICC = mpicc
-   MPICXX = mpiCC
+   MPICXX = mpicxx
    MPIF90 = mpif90
    LFLAGS = -lm
    EXTRAFLAGS = 
