@@ -306,11 +306,9 @@ int MyBraidApp::TriResidual(braid_Vector uleft_, braid_Vector uright_,
             K * f->dm + drho_right / dt - f->drho / dt + nabla_lambda_i;
     }*/
     r->dm = Pi * r->dm + K.transpose() * r->dlambda;
-    r->drho =
-        Qi * r->drho + dlambda_left / dt - r->dlambda / dt;
-    r->dlambda =
-        K * r->dm + drho_right / dt - r->drho / dt;
-    if (f != nullptr){
+    r->drho = Qi * r->drho + dlambda_left / dt - r->dlambda / dt;
+    r->dlambda = K * r->dm + drho_right / dt - r->drho / dt;
+    if (f != nullptr) {
         r->dm = r->dm - f->dm;
         r->drho = r->drho - f->drho;
         r->dlambda = r->dlambda - f->dlambda;
@@ -347,9 +345,10 @@ int MyBraidApp::TriSolve(braid_Vector uleft_, braid_Vector uright_,
 
     status.GetTIndex(&index);
     status.GetNTPoints(&final_index);
-//    final_index -= 1;
+    //    final_index -= 1;
 
-//    std::cout << "Index " << index << " and final index " << final_index << std::endl;
+    //    std::cout << "Index " << index << " and final index " << final_index
+    //    << std::endl;
     Sparse X((mspace + 1), mspace);
 
     for (int i = 0; i < mspace; i++) {
@@ -464,12 +463,13 @@ int MyBraidApp::TriSolve(braid_Vector uleft_, braid_Vector uright_,
 
                 // Solve Pi x = b
                 u->dm = invertDiagonal(Pi) * b;
-                
-                u->drho = dt * (nabla_lambda_i + K * u->dm + (1/dt) * delta_rho_ip1);
+
+                u->drho = dt * (nabla_lambda_i + K * u->dm +
+                                (1 / dt) * delta_rho_ip1);
             } else {
                 u->drho = dt * nabla_lambda_i;
             }
-            
+
         } else {
             Vector nabla_lambda_0 = this->compute_GwLi(0);
             Vector dlambda_1 = uright->dlambda;
@@ -801,7 +801,6 @@ int main(int argc, char *argv[]) {
     for (int i = 1; i < ntime + 1; i++) {
         app.q[i] = q_val * 0.0;
     }
-
 
     accumulator = 0.0;
     q_val = Vector(mspace);

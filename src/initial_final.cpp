@@ -15,4 +15,3 @@ double initial_condition(double x) {
 double final_condition(double x) {
     return 0.1 * nice_curve(x, 0.3) + 0.8 * nice_curve(x, 0.7);
 }
-

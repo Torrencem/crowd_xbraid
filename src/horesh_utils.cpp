@@ -203,7 +203,6 @@ Sparse get_A_hat(Vector &rho, Vector &m, Sparse &As, Sparse &At) {
     return A;
 }
 
-
 Sparse get_zero_matrix(Sparse &S, Sparse &A_hat) {
     Sparse result(S.rows(), A_hat.cols());
 

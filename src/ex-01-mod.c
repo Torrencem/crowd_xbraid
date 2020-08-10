@@ -56,11 +56,11 @@
  *                  1.73415299158326e-02
  **/
 
+#include <assert.h>
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <assert.h>
 
 #include "braid.h"
 
@@ -144,7 +144,6 @@ int my_SpatialNorm(braid_App app, braid_Vector u, double *norm_ptr) {
 int my_Access(braid_App app, braid_Vector u, braid_AccessStatus astatus) {
     return 0;
 }
-
 
 int my_BufSize(braid_App app, int *size_ptr, braid_BufferStatus bstatus) {
     *size_ptr = sizeof(double);
