@@ -8,15 +8,15 @@
 
 double objective(double alpha, braid_BaseVector *us_prev, braid_BaseVector *us,
                  int len, int level, braid_App app, braid_Core core) {
-    printf("us (len %d) is: ", len);
-    for (int i = 0; i < len; i++) {
-        printf("%f, ", us[i]->userVector->value);
-    }
-    printf("\nus_prev is: ");
-    for (int i = 0; i < len; i++) {
-        printf("%f, ", us_prev[i]->userVector->value);
-    }
-    printf("\n");
+    /* printf("us (len %d) is: ", len); */
+    /* for (int i = 0; i < len; i++) { */
+    /*     printf("%f, ", us[i]->userVector->value); */
+    /* } */
+    /* printf("\nus_prev is: "); */
+    /* for (int i = 0; i < len; i++) { */
+    /*     printf("%f, ", us_prev[i]->userVector->value); */
+    /* } */
+    /* printf("\n"); */
     int cfactor;
     _braid_GetCFactor(core, level, &cfactor);
     double result = 0.0;
@@ -56,15 +56,15 @@ double objective(double alpha, braid_BaseVector *us_prev, braid_BaseVector *us,
         /* struct _braid_BaseVector_struct *ustop; */
         /* _braid_BaseClone(core, app, us[i], &ustop); */
         _braid_BaseStep(core, app, NULL, NULL, phi_u_prev, level + 1, status);
-        double tmp = phi_u_prev->userVector->value;
+        /* double tmp = phi_u_prev->userVector->value; */
         // r = ustop - \Phi(ustart)
         _braid_BaseSum(core, app, -1.0, us_updated, 1.0, phi_u_prev);
         r = phi_u_prev;
         double norm;
         _braid_BaseSpatialNorm(core, app, r, &norm);
         result += norm;
-        printf("Residual is %f for index %d (value is %f and %f)\n", norm, i,
-               tmp, us_updated->userVector->value);
+        /* printf("Residual is %f for index %d (value is %f and %f)\n", norm, i, */
+               /* tmp, us_updated->userVector->value); */
         /* _braid_BaseFree(core, app, us_updated); */
     }
     printf("Result is %f\n", result);
@@ -108,7 +108,7 @@ int line_search_sync(braid_App app, braid_SyncStatus status) {
     int num_total_points, c_factor;
     int iter;
     braid_SyncStatusGetIter(status, &iter);
-    braid_Core core = (braid_Core)status;
+    braid_Core core = (braid_Core) status;
 
     MPI_Comm_size(MPI_COMM_WORLD, &num_procesors);
 
@@ -121,20 +121,20 @@ int line_search_sync(braid_App app, braid_SyncStatus status) {
         return 0;
     }
 
-    num_vectors = num_total_points / c_factor + 1;
+    num_vectors = num_total_points + 1;
 
     // Collect us - the vectors for our process
     _braid_Grid **grids = _braid_StatusElt(status, grids);
     _braid_Grid *grid = grids[level];
-    upper_t = grid->cupper / c_factor;
-    lower_t = grid->clower / c_factor;
+    upper_t = grid->iupper;
+    lower_t = grid->ilower;
 
     int bvector_size;
     _braid_BaseBufSize(core, app, &bvector_size, (braid_BufferStatus)core);
     int safe_message_size =
         (num_vectors / num_procesors + 2) * bvector_size + 2 * sizeof(int);
 
-    int my_num_values = upper_t - lower_t + 1; // Assuming upper_t is inclusive
+    int my_num_values = upper_t - lower_t + 1; 
 
     assert(2 * sizeof(int) + my_num_values * bvector_size <=
            (unsigned long)safe_message_size);
@@ -142,11 +142,12 @@ int line_search_sync(braid_App app, braid_SyncStatus status) {
     braid_BaseVector *us = malloc(my_num_values * sizeof(braid_BaseVector));
 
     for (int i = 0; i < my_num_values; i++) {
-        int fine_index;
-        _braid_MapCoarseToFine(lower_t + i, c_factor, fine_index);
+        /* int fine_index; */
+        /* _braid_MapCoarseToFine(lower_t + i, c_factor, fine_index); */
         braid_BaseVector base_v;
 
-        _braid_UGetVectorRef((braid_Core)status, level, fine_index, &base_v);
+        /* _braid_UGetVectorRef((braid_Core)status, level, fine_index, &base_v); */
+        _braid_UGetVectorRef((braid_Core)status, level, lower_t + i, &base_v);
 
         assert(base_v != NULL);
 

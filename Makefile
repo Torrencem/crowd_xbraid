@@ -108,6 +108,10 @@ ex-01-mod: src/ex-01-mod.c $(BRAID_LIB_FILE)
 	@echo "Building" $@ "..."
 	$(MPICC) $(CFLAGS) $(BRAID_FLAGS) -o ex-01-mod src/ex-01-mod.c $(BRAID_LIB_FILE) $(LFLAGS) $(EXTRAFLAGS)
 
+trimgrit-burgers: src/trimgrit-burgers.c $(BRAID_LIB_FILE)
+	@echo "Building" $@ "..."
+	$(MPICC) $(CFLAGS) $(BRAID_FLAGS) -o trimgrit-burgers src/trimgrit-burgers.c $(BRAID_LIB_FILE) $(LFLAGS) $(EXTRAFLAGS)
+
 crowd_horesh_xbraid: src/crowd_horesh_xbraid.cpp
 	@echo "Building" $@ "..."
 	$(MPICXX) $(CXXFLAGS) $(BRAID_FLAGS) -o crowd_horesh_xbraid src/crowd_horesh_xbraid.cpp -I $(EIGEN_DIR) $(BRAID_LIB_FILE) $(LFLAGS) $(EXTRAFLAGS)
