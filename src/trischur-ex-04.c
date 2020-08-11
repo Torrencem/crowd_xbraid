@@ -581,6 +581,9 @@ main(int argc, char *argv[])
    int         access_level, print_level;
    double      tol;
 
+   // Whether or not use the line search sync function
+   int line_search = 0;
+
    /* Initialize MPI */
    MPI_Init(&argc, &argv);
    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
@@ -594,15 +597,15 @@ main(int argc, char *argv[])
    gamma = 0.005;            /* Relaxation parameter in the objective function */
 
    /* Define some Braid parameters */
-   max_levels     = 30;
+   max_levels     = 5;
    min_coarse     = 1;
    nrelax         = 1;
    nrelaxc        = 7;
    maxiter        = 20;
    cfactor        = 2;
    tol            = 1.0e-6;
-   access_level   = 1;
-   print_level    = 2;
+   access_level   = -1;
+   print_level    = 1;
 
    /* Parse command line */
    arg_index = 1;
@@ -684,6 +687,10 @@ main(int argc, char *argv[])
          arg_index++;
          print_level = atoi(argv[arg_index++]);
       }
+      else if ( strcmp(argv[arg_index], "-linesearch") == 0 )
+      {
+        line_search = 1;
+      }
       else
       {
          printf("ABORTING: incorrect command line parameter %s\n", argv[arg_index]);
@@ -721,8 +728,10 @@ main(int argc, char *argv[])
    braid_SetPrintLevel( core, print_level);       
    braid_SetMaxIter(core, maxiter);
    braid_SetAbsTol(core, tol);
-
-   braid_SetSync(core, line_search_sync);
+    
+   if (line_search) {
+       braid_SetSync(core, line_search_sync);
+   }
 
    /* Parallel-in-time TriMGRIT simulation */
    braid_Drive(core);

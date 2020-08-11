@@ -108,6 +108,10 @@ trischur-ex-04: src/trischur-ex-04.c $(BRAID_LIB_FILE) src/split_line_search.c
 	@echo "Building" $@ "..."
 	$(MPICC) $(CFLAGS) $(BRAID_FLAGS) -o trischur-ex-04 src/trischur-ex-04.c $(BRAID_LIB_FILE) $(LFLAGS)
 
+trischur-adv-diff: src/trischur-adv-diff.c $(BRAID_LIB_FILE) src/split_line_search.c
+	@echo "Building" $@ "..."
+	$(MPICC) $(CFLAGS) $(BRAID_FLAGS) -o trischur-adv-diff src/trischur-adv-diff.c $(BRAID_LIB_FILE) $(LFLAGS)
+
 crowd_horesh_xbraid: src/crowd_horesh_xbraid.cpp
 	@echo "Building" $@ "..."
 	$(MPICXX) $(CXXFLAGS) $(BRAID_FLAGS) -o crowd_horesh_xbraid src/crowd_horesh_xbraid.cpp -I $(EIGEN_DIR) $(BRAID_LIB_FILE) $(LFLAGS) $(EXTRACXXFLAGS)

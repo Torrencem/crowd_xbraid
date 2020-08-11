@@ -13,6 +13,9 @@
 #define LINE_SEARCH_B_START 2.0
 #endif
 
+#define min(a,b) (a < b ? a : b)
+#define max(a,b) (a > b ? a : b)
+
 double compute_total_residual(braid_Core core, int level) {
     braid_App app = _braid_CoreElt(core, app);
     _braid_Grid **grids = _braid_CoreElt(core, grids);
@@ -112,47 +115,78 @@ int line_search_sync(braid_App app, braid_SyncStatus status) {
         }
 
         // Perform the line search in every processor
-        double a = LINE_SEARCH_A_START;
-        double b = LINE_SEARCH_B_START;
-        double gr = (1.0 + sqrt(5.0)) / 2.0;
-        double c = b - (b - a) / gr;
-        double d = a + (b - a) / gr;
+        // https://en.wikipedia.org/wiki/Golden-section_search
+        double tol = 1e-2;
+        double a = min(LINE_SEARCH_A_START, LINE_SEARCH_B_START);
+        double b = max(LINE_SEARCH_A_START, LINE_SEARCH_B_START);
+        double h = b - a;
+        assert(h >= tol);
+        double invphi = (-1.0 + sqrt(5.0)) / 2.0;
+        double invphi2 = (3.0 - sqrt(5.0)) / 2.0;
+        int n = ceil(log(tol / h) / log(invphi));
 
-        while (fabs(c - d) > 0.00001) {
-            // Update our us values to be with alpha = c
-            for (int i = 0; i < my_num_values; i++) {
-                _braid_BaseSum(core, app, 1.0, us_fut[i], 0.0, us[i]);
-                _braid_BaseSum(core, app, 1.0 - c, us_prev[i], c, us[i]);
-            }
-            // Compute our part of the residual
-            double my_res_with_c = compute_total_residual(core, level);
+        double c = a + invphi2 * h;
+        double d = a + invphi * h;
 
-            // Update our us values to be with alpha = d
-            for (int i = 0; i < my_num_values; i++) {
-                _braid_BaseSum(core, app, 1.0, us_fut[i], 0.0, us[i]);
-                _braid_BaseSum(core, app, 1.0 - d, us_prev[i], d, us[i]);
-            }
-            // Compute our part of the residual
-            double my_res_with_d = compute_total_residual(core, level);
+        // Update our us values to be with alpha = c
+        for (int i = 0; i < my_num_values; i++) {
+            _braid_BaseSum(core, app, 1.0, us_fut[i], 0.0, us[i]);
+            _braid_BaseSum(core, app, 1.0 - c, us_prev[i], c, us[i]);
+        }
+        // Compute our part of the residual
+        double my_res_with_c = compute_total_residual(core, level);
+        double yc;
+        MPI_Allreduce(&my_res_with_c, &yc, 1, MPI_DOUBLE, MPI_SUM,
+                      MPI_COMM_WORLD);
+        
+        // Update our us values to be with alpha = d
+        for (int i = 0; i < my_num_values; i++) {
+            _braid_BaseSum(core, app, 1.0, us_fut[i], 0.0, us[i]);
+            _braid_BaseSum(core, app, 1.0 - d, us_prev[i], d, us[i]);
+        }
+        // Compute our part of the residual
+        double my_res_with_d = compute_total_residual(core, level);
+        double yd;
+        MPI_Allreduce(&my_res_with_d, &yd, 1, MPI_DOUBLE, MPI_SUM,
+                      MPI_COMM_WORLD);
 
-            double res_with_c;
-            MPI_Allreduce(&my_res_with_c, &res_with_c, 1, MPI_DOUBLE, MPI_SUM,
-                          MPI_COMM_WORLD);
-            double res_with_d;
-            MPI_Allreduce(&my_res_with_d, &res_with_d, 1, MPI_DOUBLE, MPI_SUM,
-                          MPI_COMM_WORLD);
-
-            /* printf("Comparing %f with %f\n", res_with_c, res_with_d); */
-            if (res_with_c < res_with_d) {
+        for (int k = 0; k < n - 1; k++) {
+            if (yc < yd) {
                 b = d;
+                d = c;
+                yd = yc;
+                h = invphi * h;
+                c = a + invphi2 * h;
+                // Update our us values to be with alpha = c
+                for (int i = 0; i < my_num_values; i++) {
+                    _braid_BaseSum(core, app, 1.0, us_fut[i], 0.0, us[i]);
+                    _braid_BaseSum(core, app, 1.0 - c, us_prev[i], c, us[i]);
+                }
+                // Compute our part of the residual
+                double my_res_with_c = compute_total_residual(core, level);
+                MPI_Allreduce(&my_res_with_c, &yc, 1, MPI_DOUBLE, MPI_SUM,
+                              MPI_COMM_WORLD);
             } else {
                 a = c;
+                c = d;
+                yd = yc;
+                h = invphi * h;
+                d = a + invphi * h;
+                // Update our us values to be with alpha = d
+                for (int i = 0; i < my_num_values; i++) {
+                    _braid_BaseSum(core, app, 1.0, us_fut[i], 0.0, us[i]);
+                    _braid_BaseSum(core, app, 1.0 - d, us_prev[i], d, us[i]);
+                }
+                // Compute our part of the residual
+                double my_res_with_d = compute_total_residual(core, level);
+                MPI_Allreduce(&my_res_with_d, &yd, 1, MPI_DOUBLE, MPI_SUM,
+                              MPI_COMM_WORLD);
             }
-            c = b - (b - a) / gr;
-            d = a + (b - a) / gr;
         }
-        double alpha = (a + b) / 2;
-        printf("alpha = %f\n", alpha);
+        
+        double alpha = yc < yd ? (a + d) / 2 : (c + b) / 2;
+        if (rank == 0)
+            printf("alpha = %f\n", alpha);
         // Update our us values to correspond to the alpha
         for (int i = 0; i < my_num_values; i++) {
             _braid_BaseSum(core, app, 1.0, us_fut[i], 0.0, us[i]);
