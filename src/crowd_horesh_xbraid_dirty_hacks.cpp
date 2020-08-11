@@ -305,9 +305,9 @@ int MyBraidApp::TriResidual(braid_Vector uleft_, braid_Vector uright_,
         r->dlambda =
             K * f->dm + drho_right / dt - f->drho / dt + nabla_lambda_i;
     }*/
-    r->dm = Pi * r->dm + K.transpose() * r->dlambda;
-    r->drho = Qi * r->drho + dlambda_left / dt - r->dlambda / dt;
-    r->dlambda = K * r->dm + drho_right / dt - r->drho / dt;
+    r->dm = Pi * r->dm + K.transpose() * r->dlambda + nabla_m_i;
+    r->drho = Qi * r->drho + dlambda_left / dt - r->dlambda / dt + nabla_rho_i;
+    r->dlambda = K * r->dm + drho_right / dt - r->drho / dt + nabla_lambda_i;
     if (f != nullptr) {
         r->dm = r->dm - f->dm;
         r->drho = r->drho - f->drho;
@@ -340,15 +340,12 @@ int MyBraidApp::TriSolve(braid_Vector uleft_, braid_Vector uright_,
     } else {
         dt = t - tprev;
     }
-
     int index, final_index;
 
     status.GetTIndex(&index);
     status.GetNTPoints(&final_index);
     //    final_index -= 1;
 
-    //    std::cout << "Index " << index << " and final index " << final_index
-    //    << std::endl;
     Sparse X((mspace + 1), mspace);
 
     for (int i = 0; i < mspace; i++) {
@@ -406,6 +403,7 @@ int MyBraidApp::TriSolve(braid_Vector uleft_, braid_Vector uright_,
     Sparse Pi(Pi_);
 
     if (index == 1) {
+
         // Compute delta_rho_1
         // Equation 12
         Vector nabla_l_0 = this->compute_GwLi(0);
@@ -430,6 +428,38 @@ int MyBraidApp::TriSolve(braid_Vector uleft_, braid_Vector uright_,
 
         // Solve Pi x = b
         u->dm = Pi.diagonal().cwiseInverse().cwiseProduct(b);
+
+        Sparse I(DLAMBDA_LEN_SPACE, DLAMBDA_LEN_SPACE);
+        I.setIdentity();
+        Sparse row1 = joinlr(
+            joinlr(Pi, Sparse(DM_LEN_SPACE, DRHO_LEN_SPACE)),
+            joinlr(K.transpose(), Sparse(DM_LEN_SPACE, DLAMBDA_LEN_SPACE)));
+        Sparse row2 = joinlr(joinlr(Sparse(DRHO_LEN_SPACE, DM_LEN_SPACE), Qi),
+                             joinlr((1.0 / dt) * I, (-1.0 / dt) * I));
+        Sparse row3 = joinlr(joinlr(K, (-1.0 / dt) * I),
+                             Sparse(DRHO_LEN_SPACE, DLAMBDA_LEN_SPACE * 2));
+        Sparse row4 =
+            joinlr(joinlr(Sparse(DRHO_LEN_SPACE, DM_LEN_SPACE), (1.0 / dt) * I),
+                   Sparse(DRHO_LEN_SPACE, DLAMBDA_LEN_SPACE * 2));
+        Sparse A = jointb(jointb(row1, row2), jointb(row3, row4));
+        Vector c(DM_LEN_SPACE + DRHO_LEN_SPACE + DLAMBDA_LEN_SPACE * 2);
+        c << -1.0 * this->compute_GwMi(0), -1.0 * this->compute_GwRhoi(0),
+            -1.0 * this->compute_GwLi(1) - (1 / dt) * uright->drho,
+            -1.0 * this->compute_GwLi(0);
+
+        Eigen::BiCGSTAB<Sparse, Eigen::IncompleteLUT<double>> solver;
+        solver.compute(A);
+        Vector fullsol = solver.solve(c);
+
+        u->dm = fullsol(Eigen::seq(0, DM_LEN_SPACE - 1));
+        u->drho = fullsol(
+            Eigen::seq(DM_LEN_SPACE, DM_LEN_SPACE + DRHO_LEN_SPACE - 1));
+        u->dlambda = fullsol(
+            Eigen::seq(DM_LEN_SPACE + DRHO_LEN_SPACE,
+                       DM_LEN_SPACE + DRHO_LEN_SPACE + DLAMBDA_LEN_SPACE - 1));
+        std::cout << A << std::endl << c << std::endl;
+        std::cout << u->dlambda << std::endl;
+        std::cout << "----" << std::endl;
     } else {
         // Compute delta_lambda_i
         // Equation 24
@@ -456,6 +486,13 @@ int MyBraidApp::TriSolve(braid_Vector uleft_, braid_Vector uright_,
             Eigen::BiCGSTAB<Sparse, Eigen::IncompleteLUT<double>> solver;
             solver.compute(A);
             u->dlambda = solver.solve(b);
+            /*            if (index == 3){
+                            std::cout << dt * Qi * K * invertDiagonal(Pi) *
+               nabla_m_i << "\n---" << std::endl; std::cout << Qi *
+               delta_rho_ip1 - dt * Qi * nabla_lambda_i << "\n---" << std::endl;
+                            std::cout << delta_lambda_im1 / dt << "\n---" <<
+               std::endl; std::cout << nabla_rho_i << "\n---" << std::endl;
+                        }*/
             if (index != final_index) { // Otherwise delta_m doesn't matter
                 Vector nabla_m_i = this->compute_GwMi(index);
                 // Setup Ax = b system
@@ -498,10 +535,8 @@ int MyBraidApp::Init(double t, braid_Vector *u_ptr_) {
     Vector dlambda(DLAMBDA_LEN_SPACE);
 
     dm.setConstant(0.0);
-    drho.setConstant(0.0);
+    drho.setConstant(-0.075);
     dlambda.setConstant(0.0);
-
-    dlambda.setRandom();
 
     *u_ptr = new BraidVector(dm, drho, dlambda);
 
@@ -717,16 +752,16 @@ int main(int argc, char *argv[]) {
     /* Define some Braid parameters */
     max_levels = 1;
     min_coarse = 1;
-    nrelax = 10;
-    nrelaxc = 10;
-    maxiter = 5;
+    nrelax = 1;
+    nrelaxc = 1;
+    maxiter = 1;
     cfactor = 2;
     tol = 1.0e-6;
     access_level = 1;
     print_level = 2;
 
     /* Define the space step */
-    dx = (double)1 / (mspace + 1);
+    dx = (double)1 / (mspace); // + 1);
 
     /* Define time domain and step */
     tstart = 0.0; /* Beginning of time domain */
@@ -734,7 +769,8 @@ int main(int argc, char *argv[]) {
 
     /* Set up the app structure */
     // ntime + 1 for the 2 extra time points caused by the staggered grid
-    auto app = MyBraidApp(MPI_COMM_WORLD, rank, tstart, tstop, ntime + 1);
+    auto app = MyBraidApp(MPI_COMM_WORLD, rank, tstart,
+                          tstop * (1.0 + 1.0 / ntime), ntime + 1);
     app.myid = rank;
     app.ntime = ntime;
     app.mspace = mspace;
@@ -805,7 +841,7 @@ int main(int argc, char *argv[]) {
     accumulator = 0.0;
     q_val = Vector(mspace);
     for (int i = 0; i < mspace; i++) {
-        q_val[i] = -0.5; // * final_condition(accumulator);
+        q_val[i] = -0.6; // * final_condition(accumulator);
         accumulator += 1.0 / ((double)mspace - 1.0);
     }
     app.q[app.q.size() - 1] = q_val / d_time;
