@@ -211,6 +211,10 @@ int MyBraidApp::TriResidual(braid_Vector uleft_, braid_Vector uright_,
     status.GetTriT(&t, &tprev, &tnext);
     status.GetLevel(&level);
 
+    int factor = pow(2, level);
+    index = index * factor;
+    dt = factor / (factor / dt - 1);
+    
     /* Get the time-step size */
     if (t < tnext) {
         dt = tnext - t;
@@ -326,7 +330,7 @@ int MyBraidApp::TriSolve(braid_Vector uleft_, braid_Vector uright_,
                          BraidTriStatus &status) {
     BraidVector *uleft = (BraidVector *)uleft_;
     BraidVector *uright = (BraidVector *)uright_;
-    // BraidVector *f = (BraidVector *) f_;
+    BraidVector *f = (BraidVector *) f_;
     BraidVector *u = (BraidVector *)u_;
     // BraidVector *fleft = (BraidVector *) fleft_;
     // BraidVector *fright = (BraidVector *) fright_;
@@ -341,10 +345,15 @@ int MyBraidApp::TriSolve(braid_Vector uleft_, braid_Vector uright_,
         dt = t - tprev;
     }
 
-    int index, final_index;
+    int index, final_index, level;
 
     status.GetTIndex(&index);
     status.GetNTPoints(&final_index);
+    
+    status.GetLevel(&level);
+    int factor = pow(2, level);
+    index = index * factor;
+    dt = factor / (factor / dt - 1);
     //    final_index -= 1;
 
     //    std::cout << "Index " << index << " and final index " << final_index
@@ -437,6 +446,11 @@ int MyBraidApp::TriSolve(braid_Vector uleft_, braid_Vector uright_,
             Vector nabla_m_i = this->compute_GwMi(index);
             Vector nabla_lambda_i = this->compute_GwLi(index);
             Vector nabla_rho_i = this->compute_GwRhoi(index);
+            if(f != nullptr) {
+                nabla_m_i = nabla_m_i + f->dm;
+                nabla_rho_i = nabla_rho_i + f->drho;
+                nabla_lambda_i = nabla_lambda_i + f->dlambda;
+            }
             Vector delta_lambda_im1;
             delta_lambda_im1 = uleft->dlambda;
             Vector delta_rho_ip1;
@@ -711,8 +725,8 @@ int main(int argc, char *argv[]) {
 
     /* Define space domain. Space domain is between 0 and 1, mspace defines the
      * number of steps */
-    mspace = 4;
-    ntime = 4;
+    mspace = 8;
+    ntime = 8;
 
     /* Define some Braid parameters */
     max_levels = 1;
