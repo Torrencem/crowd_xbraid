@@ -69,7 +69,7 @@ int line_search_sync(braid_App app, braid_SyncStatus status) {
 
     int my_num_values = upper_t - lower_t + 1; // Assuming upper_t is inclusive
 
-    braid_BaseVector *us = malloc(my_num_values * sizeof(braid_BaseVector));
+    braid_BaseVector *us = (braid_BaseVector *) malloc(my_num_values * sizeof(braid_BaseVector));
 
     for (int i = 0; i < my_num_values; i++) {
         braid_BaseVector base_v;
@@ -81,7 +81,7 @@ int line_search_sync(braid_App app, braid_SyncStatus status) {
 
         /* base_v->userVector->value = 1000.0; */
 
-        us[i] = malloc(sizeof(struct _braid_BaseVector_struct));
+        us[i] = (braid_BaseVector) malloc(sizeof(struct _braid_BaseVector_struct));
 
         us[i]->userVector = base_v->userVector;
         us[i]->bar = base_v->bar;
@@ -93,12 +93,12 @@ int line_search_sync(braid_App app, braid_SyncStatus status) {
 
     if (iter != 0) {
         // Receive us_prev from last iteration
-        char *us_prev_message = malloc(bvector_size * my_num_values);
+        char *us_prev_message = (char *) malloc(bvector_size * my_num_values);
         MPI_Recv(us_prev_message, bvector_size * my_num_values, MPI_BYTE, rank,
                  TAG_US_PREV, MPI_COMM_WORLD, &mpi_status);
 
         // Unpack us_prev from us_prev_message
-        braid_BaseVector *us_prev =
+        braid_BaseVector *us_prev = (braid_BaseVector *)
             malloc(sizeof(braid_BaseVector) * my_num_values);
         for (int i = 0; i < my_num_values; i++) {
             _braid_BaseBufUnpack(core, app, us_prev_message + i * bvector_size,
@@ -107,7 +107,7 @@ int line_search_sync(braid_App app, braid_SyncStatus status) {
         free(us_prev_message);
 
         // Make a copy of our u values into us_fut
-        braid_BaseVector *us_fut =
+        braid_BaseVector *us_fut = (braid_BaseVector *)
             malloc(sizeof(braid_BaseVector) * my_num_values);
         for (int i = 0; i < my_num_values; i++) {
             _braid_BaseInit(core, app, grids[level + 1]->ta[i], us_fut + i);
@@ -207,7 +207,7 @@ int line_search_sync(braid_App app, braid_SyncStatus status) {
     }
 
     // Send our us so they can be used for us_prev of the next iteration
-    char *us_prev_message = malloc(bvector_size * my_num_values);
+    char *us_prev_message = (char *) malloc(bvector_size * my_num_values);
     // Pack us_prev_message from us
     for (int i = 0; i < my_num_values; i++) {
         _braid_BaseBufPack(core, app, us[i], us_prev_message + i * bvector_size,

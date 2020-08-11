@@ -33,6 +33,7 @@
 #include <string.h>
 #include <time.h>
 
+#include "split_line_search.c"
 #include "braid_test.h"
 #include "tribraid.hpp"
 #define TAG_WORKER_RESULT 42
@@ -133,7 +134,14 @@ class MyBraidApp : public TriBraidApp {
     const Vector compute_GwLi(const int index);
     // Compute \nabla_\rho_{i - 1/2}
     const Vector compute_GwRhoi(const int index);
+
+    int Sync(BraidSyncStatus &sstatus) override;
 };
+
+int MyBraidApp::Sync(BraidSyncStatus &sstatus) {
+    line_search_sync(*((braid_App *) this), *((braid_SyncStatus *) &sstatus));
+    return 0;
+}
 
 const Vector MyBraidApp::get_RHS(int index) {
     return RHS(Eigen::seq(index * DLAMBDA_LEN_SPACE,
@@ -529,6 +537,8 @@ int main(int argc, char *argv[]) {
     core.SetPrintLevel(print_level);
     core.SetMaxIter(maxiter);
     core.SetAbsTol(tol);
+
+    core.SetSync();
 
     time = 1.0;
     int iters = 3;
