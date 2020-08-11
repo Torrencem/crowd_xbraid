@@ -19,12 +19,12 @@ double nice_curve(double x, double c) {
 
 /// Initial condition for rho
 double initial_condition(double x) {
-    return 0.8 * nice_curve(x, 0.3) + 0.3 * nice_curve(x, 0.7);
+    return nice_curve(x, 0.5);
 }
 
 /// Final condition for rho
 double final_condition(double x) {
-    return 0.1 * nice_curve(x, 0.3) + 0.8 * nice_curve(x, 0.7);
+    return 0.5 * nice_curve(x, 0.25) + 0.5 * nice_curve(x, 0.75);
 }
 
 Sparse block_diag(const Sparse &diag, const int ncopies) {
@@ -321,7 +321,7 @@ int main() {
     Vector q(mspace * (ntime + 2), 1);
 
     double time = 1.0;
-    int iters = 15;
+    int iters = 20;
 
     double d_time = time / ntime;
 
@@ -421,7 +421,7 @@ int main() {
 
     for (int x = 0; x < ntime; x++) {
         for (int y = 0; y < mspace; y++) {
-            std::cout << x << ", " << y << ": " << rho[x * mspace + y]
+            std::cout << x << ", " << y << ": " << m[x * mspace + y] / rho[x * mspace + y]
                       << std::endl;
         }
     }

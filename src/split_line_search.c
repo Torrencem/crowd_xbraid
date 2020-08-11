@@ -5,6 +5,14 @@
 
 #define TAG_US_PREV 4
 
+#ifndef LINE_SEARCH_A_START
+#define LINE_SEARCH_A_START 0.0
+#endif
+
+#ifndef LINE_SEARCH_B_START
+#define LINE_SEARCH_B_START 2.0
+#endif
+
 double compute_total_residual(braid_Core core, int level) {
     braid_App app = _braid_CoreElt(core, app);
     _braid_Grid **grids = _braid_CoreElt(core, grids);
@@ -80,10 +88,6 @@ int line_search_sync(braid_App app, braid_SyncStatus status) {
     int rank;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
-    printf(
-        "Calling line_search sync at level 0 on iteration %d (I'm rank %d)\n",
-        iter, rank);
-
     if (iter != 0) {
         // Receive us_prev from last iteration
         char *us_prev_message = malloc(bvector_size * my_num_values);
@@ -108,8 +112,8 @@ int line_search_sync(braid_App app, braid_SyncStatus status) {
         }
 
         // Perform the line search in every processor
-        double a = 0.0;
-        double b = 1.0;
+        double a = LINE_SEARCH_A_START;
+        double b = LINE_SEARCH_B_START;
         double gr = (1.0 + sqrt(5.0)) / 2.0;
         double c = b - (b - a) / gr;
         double d = a + (b - a) / gr;

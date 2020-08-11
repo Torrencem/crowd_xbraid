@@ -10,7 +10,7 @@ ifeq ($(shell uname -s), Darwin)
    MPICXX = mpicxx
    MPIF90 = mpif90
    LFLAGS = -lm -lstdc++
-   EXTRAFLAGS = 
+   EXTRACXXFLAGS = 
    ifeq ($(optlevel),DEBUG)
       CFLAGS = -g -Wall -L/usr/local/opt/openblas/lib -I/usr/local/opt/openblas/include -L/usr/local/opt/lapack/lib -I/usr/local/opt/lapack/insude -D NOINLINE
       CXXFLAGS = -g -Wall -L/usr/local/opt/openblas/lib -I/usr/local/opt/openblas/include -L/usr/local/opt/lapack/lib -I/usr/local/opt/lapack/insude -D NOINLINE
@@ -26,7 +26,7 @@ else ifeq ($(findstring cab,$(HOSTNAME)),cab)
    MPICXX = mpiicpc
    MPIF90 = mpif90
    LFLAGS = -lm
-   EXTRAFLAGS = 
+   EXTRACXXFLAGS = 
    ifeq ($(optlevel),DEBUG)
       CFLAGS = -g -Wall -D NOINLINE
       CXXFLAGS = -g -Wall -D NOINLINE
@@ -42,7 +42,7 @@ else ifeq ($(findstring vulcan,$(HOSTNAME)),vulcan)
    MPICXX = mpixlcxx
    MPIF90 = mpixlf90
    LFLAGS = -lm
-   EXTRAFLAGS = 
+   EXTRACXXFLAGS = 
    ifeq ($(optlevel),DEBUG)
       CFLAGS = -g -Wall -D NOINLINE
       CXXFLAGS = -g -Wall -D NOINLINE
@@ -57,7 +57,7 @@ else ifeq ($(shell uname -s),Linux)
    MPICXX = mpicxx
    MPIF90 = mpif90
    LFLAGS = -lm
-   EXTRAFLAGS = -std=c++11
+   EXTRACXXFLAGS = -std=c++11
    ifeq ($(optlevel),DEBUG)
       CFLAGS = -g -Wall -D NOINLINE
       CXXFLAGS = -g -Wall -D NOINLINE
@@ -72,7 +72,7 @@ else
    MPICXX = mpicxx
    MPIF90 = mpif90
    LFLAGS = -lm
-   EXTRAFLAGS = 
+   EXTRACXXFLAGS = 
    ifeq ($(optlevel),DEBUG)
       CFLAGS = -g -Wall -D NOINLINE
       CXXFLAGS = -g -Wall -D NOINLINE
@@ -104,21 +104,21 @@ list:
 xbraid: ./xbraid/braid/*.c
 	cd xbraid; $(MAKE) braid
 
-trimgrit-burgers: src/trimgrit-burgers.c $(BRAID_LIB_FILE) src/split_line_search.c
+trischur-ex-04: src/trischur-ex-04.c $(BRAID_LIB_FILE) src/split_line_search.c
 	@echo "Building" $@ "..."
-	$(MPICC) $(CFLAGS) $(BRAID_FLAGS) -o trimgrit-burgers src/trimgrit-burgers.c $(BRAID_LIB_FILE) $(LFLAGS) $(EXTRAFLAGS)
+	$(MPICC) $(CFLAGS) $(BRAID_FLAGS) -o trischur-ex-04 src/trischur-ex-04.c $(BRAID_LIB_FILE) $(LFLAGS)
 
 crowd_horesh_xbraid: src/crowd_horesh_xbraid.cpp
 	@echo "Building" $@ "..."
-	$(MPICXX) $(CXXFLAGS) $(BRAID_FLAGS) -o crowd_horesh_xbraid src/crowd_horesh_xbraid.cpp -I $(EIGEN_DIR) $(BRAID_LIB_FILE) $(LFLAGS) $(EXTRAFLAGS)
+	$(MPICXX) $(CXXFLAGS) $(BRAID_FLAGS) -o crowd_horesh_xbraid src/crowd_horesh_xbraid.cpp -I $(EIGEN_DIR) $(BRAID_LIB_FILE) $(LFLAGS) $(EXTRACXXFLAGS)
 
 crowd_horesh_xbraid_schur: src/crowd_horesh_xbraid_schur.cpp
 	@echo "Building" $@ "..."
-	$(MPICXX) $(CXXFLAGS) $(BRAID_FLAGS) -o crowd_horesh_xbraid_schur src/crowd_horesh_xbraid_schur.cpp -I $(EIGEN_DIR) $(BRAID_LIB_FILE) $(LFLAGS) $(EXTRAFLAGS)
+	$(MPICXX) $(CXXFLAGS) $(BRAID_FLAGS) -o crowd_horesh_xbraid_schur src/crowd_horesh_xbraid_schur.cpp -I $(EIGEN_DIR) $(BRAID_LIB_FILE) $(LFLAGS) $(EXTRACXXFLAGS)
 
 crowd_horesh: src/crowd_horesh.cpp
 	@echo "Building" $@ "..."
-	$(MPICXX) $(CXXFLAGS) -o crowd_horesh src/crowd_horesh.cpp -I $(EIGEN_DIR) $(EXTRAFLAGS) -Wextra -std=c++14
+	$(MPICXX) $(CXXFLAGS) -o crowd_horesh src/crowd_horesh.cpp -I $(EIGEN_DIR) $(EXTRACXXFLAGS) -Wextra -std=c++14
 
 run_horesh: crowd_horesh
 	./crowd_horesh
@@ -131,7 +131,7 @@ run_horesh_schur: crowd_horesh_xbraid_schur
 
 clean:
 	rm -f *.out.*
-	rm -f *.o crowd_horesh crowd_horesh_xbraid crowd_horesh_xbraid_schur ex-01-mod
+	rm -f *.o crowd_horesh crowd_horesh_xbraid crowd_horesh_xbraid_schur ex-01-mod trischur-ex-04
 
 fmt: src/*.c src/*.cpp
 	for file in $^ ; do \
