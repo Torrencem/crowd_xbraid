@@ -182,7 +182,7 @@ int line_search_sync(braid_App app, braid_SyncStatus status) {
     }
     MPI_Isend(us_prev_message, bvector_size * my_num_values, MPI_BYTE, rank,
               TAG_US_PREV, MPI_COMM_WORLD, &request);
-    free(us_prev_message);
+    // free(us_prev_message);
 
     return 0;
 }

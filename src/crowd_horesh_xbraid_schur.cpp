@@ -413,7 +413,7 @@ int MyBraidApp::Access(braid_Vector u_, BraidAccessStatus &astatus) {
         }
         MPI_Isend((void *)buffer, message_size, MPI_BYTE, 0, TAG_WORKER_RESULT,
                   MPI_COMM_WORLD, &send_request);
-        free(buffer);
+        // free(buffer);
     }
     return 0;
 }
