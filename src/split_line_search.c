@@ -13,8 +13,8 @@
 #define LINE_SEARCH_B_START 2.0
 #endif
 
-#define min(a,b) (a < b ? a : b)
-#define max(a,b) (a > b ? a : b)
+#define min(a, b) (a < b ? a : b)
+#define max(a, b) (a > b ? a : b)
 
 double compute_total_residual(braid_Core core, int level) {
     braid_App app = _braid_CoreElt(core, app);
@@ -138,7 +138,7 @@ int line_search_sync(braid_App app, braid_SyncStatus status) {
         double yc;
         MPI_Allreduce(&my_res_with_c, &yc, 1, MPI_DOUBLE, MPI_SUM,
                       MPI_COMM_WORLD);
-        
+
         // Update our us values to be with alpha = d
         for (int i = 0; i < my_num_values; i++) {
             _braid_BaseSum(core, app, 1.0, us_fut[i], 0.0, us[i]);
@@ -183,7 +183,7 @@ int line_search_sync(braid_App app, braid_SyncStatus status) {
                               MPI_COMM_WORLD);
             }
         }
-        
+
         double alpha = yc < yd ? (a + d) / 2 : (c + b) / 2;
         if (rank == 0)
             printf("alpha = %f\n", alpha);

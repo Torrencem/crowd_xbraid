@@ -560,7 +560,7 @@ int main(int argc, char *argv[]) {
 
     // Set up initial and final values for rho.
     app.q = std::vector<Vector>(Q_LEN_TIME);
-    
+
     bool first_iteration = true;
     double accumulator = 0.0;
     Vector q_val(Q_LEN_SPACE);
@@ -665,8 +665,8 @@ int main(int argc, char *argv[]) {
         }
         app.RHS = -(D1 * RHS_m + D2 * RHS_rho - app.GlambdaL);
 
-        // On the first iteration of our minimization, we run a traditional step so that
-        // XBraid isn't given garbage that takes forever to converge
+        // On the first iteration of our minimization, we run a traditional step
+        // so that XBraid isn't given garbage that takes forever to converge
 
         if (first_iteration) {
             first_iteration = false;
@@ -713,36 +713,37 @@ int main(int argc, char *argv[]) {
             start += len;
             len = solution.size() - start;
             Eigen::Map<Vector> dlambda(solution.data() + start, len);
-        
+
             Vector dm_(dm);
             Vector drho_(drho);
             Vector dlambda_(dlambda);
 
-            double alpha = line_search(dm_, drho_, dlambda_, m, rho, lambda, As, At,
-                                       D1, D2, q_long, D);
+            double alpha = line_search(dm_, drho_, dlambda_, m, rho, lambda, As,
+                                       At, D1, D2, q_long, D);
 
             // Put the results in app.m, app.rho, app.lambda
             for (unsigned long i = 0; i < app.m.size(); i++) {
-                app.m[i] +=
-                    alpha * dm(Eigen::seq(i * DM_LEN_SPACE,
-                                               (i + 1) * DM_LEN_SPACE - 1));
+                app.m[i] += alpha * dm(Eigen::seq(i * DM_LEN_SPACE,
+                                                  (i + 1) * DM_LEN_SPACE - 1));
             }
             for (unsigned long i = 0; i < app.rho.size(); i++) {
                 app.rho[i] +=
                     alpha * drho(Eigen::seq(i * DRHO_LEN_SPACE,
-                                                 (i + 1) * DRHO_LEN_SPACE - 1));
+                                            (i + 1) * DRHO_LEN_SPACE - 1));
             }
             for (unsigned long i = 0; i < app.lambda.size(); i++) {
-                app.lambda[i] += alpha * dlambda(Eigen::seq(i * DLAMBDA_LEN_SPACE,
-                                                                (i + 1) * DLAMBDA_LEN_SPACE - 1));
+                app.lambda[i] +=
+                    alpha *
+                    dlambda(Eigen::seq(i * DLAMBDA_LEN_SPACE,
+                                       (i + 1) * DLAMBDA_LEN_SPACE - 1));
             }
         } else {
             // At last, run the parallel-in-time TriMGRIT simulation
             core.Drive();
 
-            // Collect resultant vectors for dlambda from the cores across which the
-            // simulation was distributed, compute line search, and push results
-            // back to parallel cores.
+            // Collect resultant vectors for dlambda from the cores across which
+            // the simulation was distributed, compute line search, and push
+            // results back to parallel cores.
             if (rank == 0) {
                 // Main processor
                 // Receive from access the results of workers' computation
@@ -756,8 +757,9 @@ int main(int argc, char *argv[]) {
                     int message_size =
                         sizeof(int) + sizeof(double) * DLAMBDA_LEN_SPACE;
                     char *buffer = (char *)malloc(message_size);
-                    MPI_Recv((void *)buffer, message_size, MPI_BYTE, MPI_ANY_SOURCE,
-                             TAG_WORKER_RESULT, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+                    MPI_Recv((void *)buffer, message_size, MPI_BYTE,
+                             MPI_ANY_SOURCE, TAG_WORKER_RESULT, MPI_COMM_WORLD,
+                             MPI_STATUS_IGNORE);
                     // printf("received: %d out of %d\n", num_received,
                     // num_messages_expected);
                     int *buffer_ = (int *)buffer;
@@ -781,8 +783,8 @@ int main(int argc, char *argv[]) {
                 Vector dm_RHS = D1.transpose() * dlambda_long + app.GmL;
                 Vector dm_long(DM_LEN_TIME * DM_LEN_SPACE);
                 for (int i = 0; i < DM_LEN_TIME; i++) {
-                    dm_long(
-                        Eigen::seq(i * DM_LEN_SPACE, (i + 1) * DM_LEN_SPACE - 1))
+                    dm_long(Eigen::seq(i * DM_LEN_SPACE,
+                                       (i + 1) * DM_LEN_SPACE - 1))
                         << -1.0 * invertDiagonal(app.computeP(i)) *
                                dm_RHS(Eigen::seq(i * DM_LEN_SPACE,
                                                  (i + 1) * DM_LEN_SPACE - 1));
@@ -793,30 +795,38 @@ int main(int argc, char *argv[]) {
                     drho_long(Eigen::seq(i * DRHO_LEN_SPACE,
                                          (i + 1) * DRHO_LEN_SPACE - 1))
                         << -1.0 * invertDiagonal(app.computeQ(i)) *
-                               drho_RHS(Eigen::seq(i * DRHO_LEN_SPACE,
-                                                   (i + 1) * DRHO_LEN_SPACE - 1));
+                               drho_RHS(
+                                   Eigen::seq(i * DRHO_LEN_SPACE,
+                                              (i + 1) * DRHO_LEN_SPACE - 1));
                 }
 
-                double alpha =
-                    line_search(dm_long, drho_long, dlambda_long, m_long, rho_long,
-                                lambda_long, As, At, D1, D2, q_long, D);
+                double alpha = line_search(dm_long, drho_long, dlambda_long,
+                                           m_long, rho_long, lambda_long, As,
+                                           At, D1, D2, q_long, D);
 
-                printf("Line search completed for iteration %d. alpha = %f\n", i_,
-                       alpha);
+                printf("Line search completed for iteration %d. alpha = %f\n",
+                       i_, alpha);
 
                 for (unsigned long i = 0; i < app.m.size(); i++) {
-                    app.m[i] = m_long(Eigen::seq(i * DM_LEN_SPACE, (i + 1) * DM_LEN_SPACE - 1)) +
+                    app.m[i] =
+                        m_long(Eigen::seq(i * DM_LEN_SPACE,
+                                          (i + 1) * DM_LEN_SPACE - 1)) +
                         alpha * dm_long(Eigen::seq(i * DM_LEN_SPACE,
                                                    (i + 1) * DM_LEN_SPACE - 1));
                 }
                 for (unsigned long i = 0; i < app.rho.size(); i++) {
-                    app.rho[i] = rho_long(Eigen::seq(i * DRHO_LEN_SPACE, (i + 1) * DRHO_LEN_SPACE - 1)) +
-                        alpha * drho_long(Eigen::seq(i * DRHO_LEN_SPACE,
-                                                     (i + 1) * DRHO_LEN_SPACE - 1));
+                    app.rho[i] =
+                        rho_long(Eigen::seq(i * DRHO_LEN_SPACE,
+                                            (i + 1) * DRHO_LEN_SPACE - 1)) +
+                        alpha *
+                            drho_long(Eigen::seq(i * DRHO_LEN_SPACE,
+                                                 (i + 1) * DRHO_LEN_SPACE - 1));
                 }
                 for (unsigned long i = 0; i < app.lambda.size(); i++) {
-                    app.lambda[i] = lambda_long(Eigen::seq(i * DLAMBDA_LEN_SPACE, (i + 1) * DLAMBDA_LEN_SPACE - 1)) +
-                        alpha * dlambda[i];
+                    app.lambda[i] = lambda_long(Eigen::seq(
+                                        i * DLAMBDA_LEN_SPACE,
+                                        (i + 1) * DLAMBDA_LEN_SPACE - 1)) +
+                                    alpha * dlambda[i];
                 }
             }
         }
@@ -879,7 +889,7 @@ int main(int argc, char *argv[]) {
     }
 
     for (int i = 0; i < DRHO_LEN_TIME; i++) {
-        for (int j = 0; j < DRHO_LEN_SPACE; j++){
+        for (int j = 0; j < DRHO_LEN_SPACE; j++) {
             std::cout << i << ", " << j << ": " << app.rho[i](j) << std::endl;
         }
     }

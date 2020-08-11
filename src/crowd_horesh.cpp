@@ -18,9 +18,7 @@ double nice_curve(double x, double c) {
 }
 
 /// Initial condition for rho
-double initial_condition(double x) {
-    return nice_curve(x, 0.5);
-}
+double initial_condition(double x) { return nice_curve(x, 0.5); }
 
 /// Final condition for rho
 double final_condition(double x) {
@@ -421,8 +419,8 @@ int main() {
 
     for (int x = 0; x < ntime; x++) {
         for (int y = 0; y < mspace; y++) {
-            std::cout << x << ", " << y << ": " << m[x * mspace + y] / rho[x * mspace + y]
-                      << std::endl;
+            std::cout << x << ", " << y << ": "
+                      << m[x * mspace + y] / rho[x * mspace + y] << std::endl;
         }
     }
 }
