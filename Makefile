@@ -112,11 +112,11 @@ trischur-adv-diff: src/trischur-adv-diff.c $(BRAID_LIB_FILE) src/split_line_sear
 	@echo "Building" $@ "..."
 	$(MPICC) $(CFLAGS) $(BRAID_FLAGS) -o trischur-adv-diff src/trischur-adv-diff.c $(BRAID_LIB_FILE) $(LFLAGS)
 
-crowd_horesh_xbraid: src/crowd_horesh_xbraid.cpp
+crowd_horesh_xbraid: src/crowd_horesh_xbraid.cpp $(BRAID_LIB_FILE)
 	@echo "Building" $@ "..."
 	$(MPICXX) $(CXXFLAGS) $(BRAID_FLAGS) -o crowd_horesh_xbraid src/crowd_horesh_xbraid.cpp -I $(EIGEN_DIR) $(BRAID_LIB_FILE) $(LFLAGS) $(EXTRACXXFLAGS)
 
-crowd_horesh_xbraid_schur: src/crowd_horesh_xbraid_schur.cpp
+crowd_horesh_xbraid_schur: src/crowd_horesh_xbraid_schur.cpp $(BRAID_LIB_FILE) src/split_line_search.cpp
 	@echo "Building" $@ "..."
 	$(MPICXX) $(CXXFLAGS) $(BRAID_FLAGS) -o crowd_horesh_xbraid_schur src/crowd_horesh_xbraid_schur.cpp -I $(EIGEN_DIR) $(BRAID_LIB_FILE) $(LFLAGS) $(EXTRACXXFLAGS)
 

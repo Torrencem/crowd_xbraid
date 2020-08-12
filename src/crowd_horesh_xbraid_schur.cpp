@@ -35,6 +35,13 @@
 
 #include "braid_test.h"
 #include "tribraid.hpp"
+
+// #define LINE_SEARCH
+
+#ifdef LINE_SEARCH
+#include "split_line_search.cpp"
+#endif
+
 #define TAG_WORKER_RESULT 42
 
 #define DM_LEN_SPACE (mspace + 1)
@@ -65,7 +72,11 @@ class BraidVector {
     virtual ~BraidVector(){};
 };
 
+#ifdef LINE_SEARCH
+class MyBraidApp : public TriBraidLineSearchApp {
+#else
 class MyBraidApp : public TriBraidApp {
+#endif
   protected:
     // BraidApp defines tstart, tstop, ntime and comm_t
   public:
@@ -166,7 +177,11 @@ const Vector MyBraidApp::compute_GwRhoi(const int index) {
 
 MyBraidApp::MyBraidApp(MPI_Comm comm_t_, int rank_, double tstart_,
                        double tstop_, int ntime_)
+#ifdef LINE_SEARCH
+    : TriBraidLineSearchApp(comm_t_, tstart_, tstop_, ntime_) {}
+#else
     : TriBraidApp(comm_t_, tstart_, tstop_, ntime_) {}
+#endif
 
 //------------------------------------
 
@@ -492,7 +507,7 @@ int main(int argc, char *argv[]) {
     maxiter = 300;
     tol = 1.0e-8;
     access_level = 1;
-    print_level = -1;
+    print_level = 2;
 
     // Define the space step
     dx = (double)1 / (mspace + 1);
@@ -529,6 +544,9 @@ int main(int argc, char *argv[]) {
     core.SetPrintLevel(print_level);
     core.SetMaxIter(maxiter);
     core.SetAbsTol(tol);
+#ifdef LINE_SEARCH
+    core.SetSync();
+#endif
 
     time = 1.0;
     int iters = 3;
