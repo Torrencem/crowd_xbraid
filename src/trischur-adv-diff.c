@@ -28,7 +28,8 @@
  *
  * Compile with:  make trischur-adv-diff
  *
- * Description:   Solves a linear optimal control problem in time-parallel:
+ * Description:   Solves a linear optimal control problem in time-parallel,
+ *                using a line search after every TriMGRIT iteration:
  *
  *                min   0.5\int_0^T \int_0^1 (u(x,t)-u0(x))^2+alpha v(x,t)^2
  *dxdt

@@ -38,7 +38,8 @@
  * Description:   solve the scalar ODE
  *                   u' = lambda u,
  *                   with lambda=-1 and y(0) = 1
- *                in a very simplified XBraid setting.
+ *                in a very simplified XBraid setting, using the RIPS line
+ *.               search.
  *
  *                When run with the default 10 time steps, the solution is:
  *                $ ./ex-01

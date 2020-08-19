@@ -1,4 +1,5 @@
-
+// A quadratic search algorithm for use instead of a line search in the linear
+// setting.
 #include "_braid.h"
 #include "util.h"
 #include <assert.h>
@@ -37,7 +38,6 @@ double compute_total_residual(braid_Core core, int level) {
 }
 
 int line_search_sync(braid_App app, braid_SyncStatus status) {
-    printf("LS");
     MPI_Status mpi_status;
     MPI_Request request;
     int level;

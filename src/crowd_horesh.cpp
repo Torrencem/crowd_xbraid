@@ -1,3 +1,7 @@
+/* A C++ implementation of Haber and Horesh's crowd modelling algorithm.
+*  See MATLAB/main.m for further explanation.
+**/
+
 #include <Eigen/Sparse>
 #include <Eigen/SparseLU>
 #include <iostream>

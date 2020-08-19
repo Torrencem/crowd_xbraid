@@ -22,9 +22,10 @@
 // Crowd model problem
 //
 // This program simulates an optimization problem of modelling the movement of a
-// crowd from one configuration to another. The math behind the code used here
-// can be found in (TODO: Reference to haber and horesh)
-
+// crowd from one configuration to another.  As in crowd_horesh_xbraid.cpp, we
+// use TriMGRIT to solve our matrix equations; however, in this case, we use a
+// Schur complement-based algorithm rather than solving the entire system at
+// once.
 #include "horesh_utils.cpp"
 #include "initial_final.cpp"
 #include <math.h>

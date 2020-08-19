@@ -31,7 +31,8 @@
  *
  * Compile with:  make trischur-ex-04
  *
- * Description:  Solves a simple optimal control problem in time-parallel:
+ * Description:  Solves a simple optimal control problem in time-parallel,
+ *               using a line search after every TriMGRIT iteration:
  *
  *                 min   \int_0^1 u_1(t)^2 + u_2(t)^2 + gamma c(t)^2  dt
  *

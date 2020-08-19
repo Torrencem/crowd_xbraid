@@ -1,4 +1,4 @@
-
+// A golden section line search to be used after every iteration of TriMGRIT.
 #include "_braid.h"
 #include "util.h"
 #include <assert.h>

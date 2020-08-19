@@ -1,4 +1,4 @@
-
+// A C++ wrapper for split_line_search.c
 #include "tribraid.hpp"
 #include <type_traits>
 #include "split_line_search.c"

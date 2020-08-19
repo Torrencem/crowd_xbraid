@@ -23,7 +23,9 @@
 //
 // This program simulates an optimization problem of modelling the movement of a
 // crowd from one configuration to another. The math behind the code used here
-// can be found in (TODO: Reference to haber and horesh)
+// can be found in Haber and Horesh's 2015 paper "A Multilevel Method for the
+// Solution of Time Dependent Optimal Transport".  We use the same algorithm
+// as in crowd_horesh.cpp, but include TriMGRIT as our matrix equation solver.
 
 #define CROWD_HORESH_LIBRARY
 #include "crowd_horesh.cpp"
